@@ -1,0 +1,41 @@
+{
+  "kind": "collectionType",
+  "collectionName": "custom_fields",
+  "info": {
+    "singularName": "custom-field",
+    "pluralName": "custom-fields",
+    "displayName": "Custom Field"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "fieldType": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "TEXT",
+        "NUMBER",
+        "MONEY",
+        "SELECT",
+        "CHECKBOX"
+      ]
+    },
+    "isRequired": {
+      "type": "boolean",
+      "default": false
+    },
+    "options": {
+      "type": "json"
+    },
+    "order": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}
