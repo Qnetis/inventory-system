@@ -13,22 +13,18 @@
   "attributes": {
     "inventoryNumber": {
       "type": "string",
-      "required": true,
-      "unique": true
+      "required": true
     },
     "barcode": {
       "type": "string",
-      "required": true,
-      "unique": true
+      "required": true
     },
     "dynamicData": {
       "type": "json"
     },
-    "users_permissions_user": {
-      "type": "relation",
-      "relation": "manyToOne",
-      "target": "plugin::users-permissions.user",
-      "inversedBy": "records"
+    "name": {
+      "type": "string",
+      "required": true
     }
   }
 }

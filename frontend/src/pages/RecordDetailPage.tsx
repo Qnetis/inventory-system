@@ -206,103 +206,104 @@ const RecordDetailPage: React.FC = () => {
         )}
       </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom>
-              Информация о записи
+   // В MUI v7 Grid API изменился. Используйте это:
+<Grid container spacing={3}>
+  <Grid size={{ xs: 12, md: 8 }}>
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="h5" gutterBottom>
+        Информация о записи
+      </Typography>
+      
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          Инвентарный номер
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          {record.inventoryNumber}
+        </Typography>
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          Штрихкод
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          {record.barcode}
+        </Typography>
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          Владелец
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          {owner?.fullName || owner?.username}
+        </Typography>
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          Дата создания
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
+            locale: ru,
+          })}
+        </Typography>
+      </Box>
+
+      <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
+        Дополнительные поля
+      </Typography>
+
+      {customFields.map((field: any) => {
+        const value = record.dynamicData?.[field.id];
+        if (value === undefined || value === null) return null;
+
+        return (
+          <Box key={field.id} sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary">
+              {field.attributes.name}
             </Typography>
-            
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Инвентарный номер
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {record.inventoryNumber}
-              </Typography>
-            </Box>
-
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Штрихкод
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {record.barcode}
-              </Typography>
-            </Box>
-
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Владелец
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {owner?.fullName || owner?.username}
-              </Typography>
-            </Box>
-
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Дата создания
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
-                  locale: ru,
-                })}
-              </Typography>
-            </Box>
-
-            <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
-              Дополнительные поля
+            <Typography variant="body1" gutterBottom>
+              {formatFieldValue(value, field.attributes.fieldType)}
             </Typography>
+          </Box>
+        );
+      })}
+    </Paper>
+  </Grid>
 
-            {customFields.map((field: any) => {
-              const value = record.dynamicData?.[field.id];
-              if (value === undefined || value === null) return null;
-
-              return (
-                <Box key={field.id} sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    {field.attributes.name}
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {formatFieldValue(value, field.attributes.fieldType)}
-                  </Typography>
-                </Box>
-              );
-            })}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom align="center">
-                Штрихкод
-              </Typography>
-              <Box display="flex" justifyContent="center" my={2}>
-                <canvas ref={canvasRef} />
-              </Box>
-              <Box display="flex" gap={1} justifyContent="center">
-                <Button
-                  variant="outlined"
-                  startIcon={<PrintIcon />}
-                  onClick={handleSystemPrint}
-                >
-                  Печать
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<BluetoothIcon />}
-                  onClick={handleBluetoothPrint}
-                  disabled={isPrinting}
-                >
-                  {isPrinting ? 'Подключение...' : 'Bluetooth'}
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+  <Grid size={{ xs: 12, md: 4 }}>
+    <Card>
+      <CardContent>
+        <Typography variant="h6" gutterBottom align="center">
+          Штрихкод
+        </Typography>
+        <Box display="flex" justifyContent="center" my={2}>
+          <canvas ref={canvasRef} />
+        </Box>
+        <Box display="flex" gap={1} justifyContent="center">
+          <Button
+            variant="outlined"
+            startIcon={<PrintIcon />}
+            onClick={handleSystemPrint}
+          >
+            Печать
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<BluetoothIcon />}
+            onClick={handleBluetoothPrint}
+            disabled={isPrinting}
+          >
+            {isPrinting ? 'Подключение...' : 'Bluetooth'}
+          </Button>
+        </Box>
+      </CardContent>
+    </Card>
+  </Grid>
+</Grid>
 
       <Dialog
         open={isEditDialogOpen}

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import React, { useState } from 'react';
 import {
   Box,
@@ -35,39 +37,52 @@ const RecordsPage: React.FC = () => {
     queryKey: ['customFields'],
     queryFn: async () => {
       const { data } = await api.get('/api/custom-fields');
+      console.log('Custom fields response:', data);
       return data.data;
     },
   });
 
   // Получение записей
-  const { data: recordsData, isLoading, refetch } = useQuery({
-    queryKey: ['records', page, pageSize, searchQuery],
-    queryFn: async () => {
-      const params: any = {
-        'pagination[page]': page + 1,
-        'pagination[pageSize]': pageSize,
-        populate: 'owner',
-      };
+const { data: recordsData, isLoading, refetch } = useQuery({
+  queryKey: ['records', page, pageSize, searchQuery],
+  queryFn: async () => {
+    const params: any = {
+      'pagination[page]': page + 1,
+      'pagination[pageSize]': pageSize,
+     // 'populate': '*', // Упрощенный вариант
+    };
 
-      if (searchQuery) {
-        params['filters[$or][0][inventoryNumber][$contains]'] = searchQuery;
-        params['filters[$or][1][barcode][$contains]'] = searchQuery;
-      }
-
-      const { data } = await api.get('/api/records', { params });
-      return data;
-    },
-  });
-
-  const handleCreateRecord = async (formData: any) => {
-    try {
-      await api.post('/api/records', { data: formData });
-      setIsCreateDialogOpen(false);
-      refetch();
-    } catch (error) {
-      console.error('Error creating record:', error);
+    if (searchQuery) {
+      params['filters[$or][0][inventoryNumber][$contains]'] = searchQuery;
+      params['filters[$or][1][barcode][$contains]'] = searchQuery;
     }
-  };
+
+    console.log('Request params:', params); // Для отладки
+    
+    const { data } = await api.get('/api/records', { params });
+    console.log('Records response:', data); // Для отладки
+    return data;
+  },
+});
+
+const handleCreateRecord = async (formData: any) => {
+  try {
+    console.log('Creating record with data:', formData);
+    
+    const response = await api.post('/api/records', { 
+      data: formData 
+    });
+    
+    console.log('Create response:', response);
+    
+    setIsCreateDialogOpen(false);
+    refetch();
+  } catch (error: any) {
+    console.error('Error creating record:', error);
+    console.error('Error response:', error.response?.data);
+    alert(`Ошибка: ${error.response?.data?.error?.message || 'Неизвестная ошибка'}`);
+  }
+};
 
   const handleRowClick = (record: any) => {
     navigate(`/records/${record.id}`);

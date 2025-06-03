@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import React from 'react';
 import {
   Table,
@@ -61,34 +63,34 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {records.map((record) => (
-              <TableRow
-                key={record.id}
-                hover
-                onClick={() => onRowClick(record)}
-                sx={{ cursor: 'pointer' }}
-              >
-                <TableCell>{record.attributes.inventoryNumber}</TableCell>
-                <TableCell>{record.attributes.barcode}</TableCell>
-                {customFields.slice(0, 3).map((field) => (
-                  <TableCell key={field.id}>
-                    {formatFieldValue(
-                      record.attributes.dynamicData?.[field.id],
-                      field.fieldType
-                    )}
-                  </TableCell>
-                ))}
-                <TableCell>
-                  {record.attributes.owner?.data?.attributes?.fullName ||
-                    record.attributes.owner?.data?.attributes?.username}
-                </TableCell>
-                <TableCell>
-                  {format(new Date(record.attributes.createdAt), 'dd.MM.yyyy', {
-                    locale: ru,
-                  })}
-                </TableCell>
-              </TableRow>
-            ))}
+           // В RecordsTable.tsx измените отображение данных:
+{records.map((record) => (
+  <TableRow
+    key={record.id}
+    hover
+    onClick={() => onRowClick(record)}
+    sx={{ cursor: 'pointer' }}
+  >
+    <TableCell>{record.inventoryNumber}</TableCell>
+    <TableCell>{record.barcode}</TableCell>
+    {customFields.slice(0, 3).map((field) => (
+      <TableCell key={field.id}>
+        {formatFieldValue(
+          record.dynamicData?.[field.id],
+          field.fieldType
+        )}
+      </TableCell>
+    ))}
+    <TableCell>
+      {record.owner?.fullName || record.owner?.username || '-'}
+    </TableCell>
+    <TableCell>
+      {format(new Date(record.createdAt), 'dd.MM.yyyy', {
+        locale: ru,
+      })}
+    </TableCell>
+  </TableRow>
+))}
           </TableBody>
         </Table>
       </TableContainer>

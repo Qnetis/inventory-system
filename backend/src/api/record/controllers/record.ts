@@ -7,53 +7,38 @@ const { v4: uuidv4 } = require('uuid');
 module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   
   async create(ctx) {
-    try {
-      const { data } = ctx.request.body;
-      const user = ctx.state.user;
-      
-      // Валидация динамических полей
-      const customFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
-        sort: { order: 'asc' }
-      });
-      
-      const errors = [];
-      for (const field of customFields) {
-        if (field.isRequired && !data.dynamicData?.[field.id]) {
-          errors.push(`Поле "${field.name}" обязательно для заполнения`);
-        }
+  try {
+    const { data } = ctx.request.body;
+    const user = ctx.state.user;
+    
+    console.log('Create request data:', data);
+    console.log('User:', user);
+    
+    // Генерация уникальных идентификаторов
+    const inventoryNumber = uuidv4();
+    const barcode = this.generateEAN13();
+    
+    // Создание записи - упрощенный вариант
+    const entity = await strapi.entityService.create('api::record.record', {
+      data: {
+        inventoryNumber,
+        barcode,
+        dynamicData: data.dynamicData || {},
+        owner: user.id,
+        publishedAt: new Date() // Добавьте это для Strapi v4
       }
-      
-      if (errors.length > 0) {
-        return ctx.badRequest('Validation failed', { errors });
-      }
-      
-      // Генерация уникальных идентификаторов
-      const inventoryNumber = uuidv4();
-      const barcode = this.generateEAN13();
-      
-      // Создание записи
-      const entity = await strapi.entityService.create('api::record.record', {
-        data: {
-          inventoryNumber,
-          barcode,
-          dynamicData: data.dynamicData || {},
-          owner: user.id
-        },
-        populate: ['owner']
-      });
-      
-
-      
-      // Вариант 2: Ручное форматирование ответа (рекомендуется)
-      return {
-        data: entity,
-        meta: {}
-      };
-      
-    } catch (error) {
-      ctx.throw(500, error);
-    }
-  },
+    });
+    
+    return {
+      data: entity,
+      meta: {}
+    };
+    
+  } catch (error) {
+    console.error('Create error:', error);
+    ctx.throw(500, error.message);
+  }
+},
   
   async find(ctx) {
     const user = ctx.state.user;

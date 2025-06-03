@@ -1,3 +1,6 @@
+// src/components/Records/DynamicForm.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import React from 'react';
 import {
   TextField,
@@ -29,20 +32,22 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     defaultValues: defaultValues || {},
   });
 
+  console.log('DynamicForm fields:', fields); // Для отладки
+
   const renderField = (field: any) => {
     const fieldName = field.id.toString();
 
-    switch (field.attributes.fieldType) {
+    switch (field.fieldType) {
       case 'TEXT':
         return (
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.attributes.isRequired }}
+            rules={{ required: field.isRequired }}
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
-                label={field.attributes.name}
+                label={field.name}
                 value={value || ''}
                 onChange={onChange}
                 error={!!errors[fieldName]}
@@ -57,12 +62,12 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.attributes.isRequired }}
+            rules={{ required: field.isRequired }}
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
                 type="number"
-                label={field.attributes.name}
+                label={field.name}
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
                 error={!!errors[fieldName]}
@@ -77,12 +82,12 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.attributes.isRequired }}
+            rules={{ required: field.isRequired }}
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
                 type="number"
-                label={field.attributes.name}
+                label={field.name}
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
                 InputProps={{
@@ -100,19 +105,19 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.attributes.isRequired }}
+            rules={{ required: field.isRequired }}
             render={({ field: { onChange, value } }) => (
               <FormControl fullWidth error={!!errors[fieldName]}>
-                <InputLabel>{field.attributes.name}</InputLabel>
+                <InputLabel>{field.name}</InputLabel>
                 <Select
                   value={value || ''}
                   onChange={onChange}
-                  label={field.attributes.name}
+                  label={field.name}
                 >
                   <MenuItem value="">
                     <em>Не выбрано</em>
                   </MenuItem>
-                  {field.attributes.options?.map((option: string) => (
+                  {field.options?.map((option: string) => (
                     <MenuItem key={option} value={option}>
                       {option}
                     </MenuItem>
@@ -139,7 +144,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                     onChange={(e) => onChange(e.target.checked)}
                   />
                 }
-                label={field.attributes.name}
+                label={field.name}
               />
             )}
           />
@@ -151,6 +156,8 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   };
 
   const onFormSubmit = (data: any) => {
+    console.log('Form data before submit:', data); // Для отладки
+    
     const dynamicData: any = {};
     fields.forEach((field) => {
       const value = data[field.id];
@@ -159,13 +166,18 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
       }
     });
 
+    console.log('Dynamic data to submit:', dynamicData); // Для отладки
     onSubmit({ dynamicData });
   };
+
+  if (!fields || fields.length === 0) {
+    return <div>Нет полей для отображения</div>;
+  }
 
   return (
     <Box component="form" onSubmit={handleSubmit(onFormSubmit)}>
       {fields
-        .sort((a, b) => a.attributes.order - b.attributes.order)
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map((field) => (
           <Box key={field.id} sx={{ mt: 2 }}>
             {renderField(field)}
