@@ -15,6 +15,8 @@ import {
   Button,
   Box,
   Typography,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { Controller, useForm } from 'react-hook-form';
 
@@ -31,6 +33,8 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   defaultValues,
   showNameField = false,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { control, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
       name: defaultValues?.name || '',
@@ -38,7 +42,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     },
   });
 
-  console.log('DynamicForm fields:', fields); // Для отладки
+  console.log('DynamicForm fields:', fields);
 
   const renderField = (field: any) => {
     const fieldData = field.attributes || field;
@@ -54,6 +58,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
+                size={isMobile ? "small" : "medium"}
                 label={fieldData.name}
                 value={value || ''}
                 onChange={onChange}
@@ -73,6 +78,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
+                size={isMobile ? "small" : "medium"}
                 type="number"
                 label={fieldData.name}
                 value={value || ''}
@@ -93,6 +99,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
+                size={isMobile ? "small" : "medium"}
                 type="number"
                 label={fieldData.name}
                 value={value || ''}
@@ -114,7 +121,11 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             control={control}
             rules={{ required: fieldData.isRequired }}
             render={({ field: { onChange, value } }) => (
-              <FormControl fullWidth error={!!errors[fieldName]}>
+              <FormControl 
+                fullWidth 
+                size={isMobile ? "small" : "medium"}
+                error={!!errors[fieldName]}
+              >
                 <InputLabel>{fieldData.name}</InputLabel>
                 <Select
                   value={value || ''}
@@ -149,6 +160,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                   <Checkbox
                     checked={!!value}
                     onChange={(e) => onChange(e.target.checked)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 }
                 label={fieldData.name}
@@ -163,7 +175,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   };
 
   const onFormSubmit = (data: any) => {
-    console.log('Form data before submit:', data); // Для отладки
+    console.log('Form data before submit:', data);
     
     const dynamicData: any = {};
     const result: any = {};
@@ -183,14 +195,14 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
 
     result.dynamicData = dynamicData;
 
-    console.log('Data to submit:', result); // Для отладки
+    console.log('Data to submit:', result);
     onSubmit(result);
   };
 
   if (!fields || fields.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
-        <Typography color="text.secondary">
+        <Typography color="text.secondary" variant={isMobile ? "body2" : "body1"}>
           Нет полей для отображения. Обратитесь к администратору для настройки полей.
         </Typography>
       </Box>
@@ -207,6 +219,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
+                size={isMobile ? "small" : "medium"}
                 label="Название записи (необязательно)"
                 value={value || ''}
                 onChange={onChange}
@@ -233,7 +246,8 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
         type="submit"
         variant="contained"
         fullWidth
-        sx={{ mt: 3 }}
+        size={isMobile ? "large" : "large"}
+        sx={{ mt: 3, py: isMobile ? 1.5 : 1 }}
       >
         Сохранить
       </Button>

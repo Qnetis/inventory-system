@@ -13,6 +13,10 @@ import {
   TextField,
   InputAdornment,
   IconButton,
+  useTheme,
+  useMediaQuery,
+  Fab,
+  Zoom,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -27,10 +31,12 @@ import DynamicForm from '../components/Records/DynamicForm';
 
 const RecordsPage: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(isMobile ? 10 : 25);
 
   // Получение кастомных полей
   const { data: customFields = [] } = useQuery({
@@ -42,7 +48,7 @@ const RecordsPage: React.FC = () => {
     },
   });
 
-const { data: recordsData, isLoading, refetch, error } = useQuery({
+  const { data: recordsData, isLoading, refetch, error } = useQuery({
     queryKey: ['records', page, pageSize, searchQuery],
     queryFn: async () => {
       const params: any = {
@@ -57,14 +63,14 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
         params['filters[$or][2][name][$containsi]'] = searchQuery;
       }
 
-      console.log('Request params:', params); // Для отладки
+      console.log('Request params:', params);
       
       const { data } = await api.get('/api/records', { params });
-      console.log('Records response:', data); // Для отладки
+      console.log('Records response:', data);
       return data;
     },
     retry: 1,
-    staleTime: 30000, // 30 секунд
+    staleTime: 30000,
   });
 
   // Показываем ошибку если есть
@@ -73,6 +79,10 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
       console.error('Error loading records:', error);
     }
   }, [error]);
+
+  React.useEffect(() => {
+    setPageSize(isMobile ? 10 : 25);
+  }, [isMobile]);
 
   const handleCreateRecord = async (formData: any) => {
     try {
@@ -90,7 +100,6 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
       console.error('Error creating record:', error);
       console.error('Error response:', error.response?.data);
       
-      // Более детальная информация об ошибке
       let errorMessage = 'Неизвестная ошибка';
       if (error.response?.data?.error?.message) {
         errorMessage = error.response.data.error.message;
@@ -110,22 +119,34 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
 
   return (
     <Box>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4">Записи</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          Добавить запись
-        </Button>
-      </Box>
+      {/* Заголовок и кнопка добавления для десктопа */}
+      {!isMobile && (
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h4">Записи</Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            Добавить запись
+          </Button>
+        </Box>
+      )}
 
-      <Paper sx={{ p: 2, mb: 2 }}>
+      {/* Мобильный заголовок */}
+      {isMobile && (
+        <Typography variant="h5" sx={{ mb: 2 }}>
+          Записи
+        </Typography>
+      )}
+
+      {/* Поиск */}
+      <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
         <TextField
           fullWidth
+          size={isMobile ? "small" : "medium"}
           variant="outlined"
-          placeholder="Поиск по инвентарному номеру, штрихкоду или названию"
+          placeholder={isMobile ? "Поиск..." : "Поиск по инвентарному номеру, штрихкоду или названию"}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           InputProps={{
@@ -136,7 +157,10 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
             ),
             endAdornment: searchQuery && (
               <InputAdornment position="end">
-                <IconButton onClick={() => setSearchQuery('')}>
+                <IconButton 
+                  onClick={() => setSearchQuery('')}
+                  size={isMobile ? "small" : "medium"}
+                >
                   <ClearIcon />
                 </IconButton>
               </InputAdornment>
@@ -145,6 +169,7 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
         />
       </Paper>
 
+      {/* Таблица записей */}
       <RecordsTable
         records={recordsData?.data || []}
         customFields={customFields}
@@ -157,11 +182,37 @@ const { data: recordsData, isLoading, refetch, error } = useQuery({
         onRowClick={handleRowClick}
       />
 
+      {/* Плавающая кнопка для мобильных */}
+      {isMobile && (
+        <Zoom in={true}>
+          <Fab
+            color="primary"
+            aria-label="add"
+            sx={{
+              position: 'fixed',
+              bottom: 16,
+              right: 16,
+            }}
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            <AddIcon />
+          </Fab>
+        </Zoom>
+      )}
+
+      {/* Диалог создания записи */}
       <Dialog
         open={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: isMobile ? { 
+            m: 1, 
+            width: 'calc(100% - 16px)',
+            maxHeight: 'calc(100% - 16px)' 
+          } : {}
+        }}
       >
         <DialogTitle>Создание новой записи</DialogTitle>
         <DialogContent>

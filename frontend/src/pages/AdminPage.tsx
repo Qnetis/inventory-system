@@ -5,12 +5,20 @@ import {
   Tabs,
   Tab,
   Paper,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import UserManagement from '../components/Admin/UserManagement';
 import FieldManagement from '../components/Admin/FieldManagement';
 import Statistics from '../components/Admin/Statistics';
 import ExportData from '../components/Admin/ExportData';
+import {
+  People as PeopleIcon,
+  FormatListBulleted as FieldsIcon,
+  BarChart as StatsIcon,
+  Download as ExportIcon,
+} from '@mui/icons-material';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -29,13 +37,15 @@ function TabPanel(props: TabPanelProps) {
       aria-labelledby={`admin-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      {value === index && <Box sx={{ py: { xs: 2, sm: 3 } }}>{children}</Box>}
     </div>
   );
 }
 
 const AdminPage: React.FC = () => {
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [tabValue, setTabValue] = useState(0);
 
   if (user?.role?.type !== 'admin') {
@@ -50,11 +60,30 @@ const AdminPage: React.FC = () => {
           onChange={(_, newValue) => setTabValue(newValue)}
           indicatorColor="primary"
           textColor="primary"
+          variant={isMobile ? "scrollable" : "standard"}
+          scrollButtons={isMobile ? "auto" : false}
+          allowScrollButtonsMobile
         >
-          <Tab label="Пользователи" />
-          <Tab label="Кастомные поля" />
-          <Tab label="Статистика" />
-          <Tab label="Экспорт данных" />
+          <Tab 
+            label={isMobile ? undefined : "Пользователи"} 
+            icon={isMobile ? <PeopleIcon /> : undefined}
+            iconPosition="start"
+          />
+          <Tab 
+            label={isMobile ? undefined : "Кастомные поля"} 
+            icon={isMobile ? <FieldsIcon /> : undefined}
+            iconPosition="start"
+          />
+          <Tab 
+            label={isMobile ? undefined : "Статистика"} 
+            icon={isMobile ? <StatsIcon /> : undefined}
+            iconPosition="start"
+          />
+          <Tab 
+            label={isMobile ? undefined : "Экспорт данных"} 
+            icon={isMobile ? <ExportIcon /> : undefined}
+            iconPosition="start"
+          />
         </Tabs>
       </Paper>
 

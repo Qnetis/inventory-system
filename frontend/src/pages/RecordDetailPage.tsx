@@ -8,19 +8,26 @@ import {
   Paper,
   Typography,
   Button,
-  Grid,
+  Grid, // Новый Grid из MUI v7
   Card,
   CardContent,
   CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
+  IconButton,
+  Stack,
+  Divider,
+  useTheme,
+  useMediaQuery,
+  Fab,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   Print as PrintIcon,
   Bluetooth as BluetoothIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import JsBarcode from 'jsbarcode';
 import { format } from 'date-fns';
@@ -33,6 +40,8 @@ const RecordDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -63,14 +72,14 @@ const RecordDetailPage: React.FC = () => {
       if (record.barcode) {
         JsBarcode(canvasRef.current, record.barcode, {
           format: 'EAN13',
-          width: 2,
-          height: 100,
+          width: isMobile ? 1.5 : 2,
+          height: isMobile ? 80 : 100,
           displayValue: true,
-          fontSize: 16,
+          fontSize: isMobile ? 14 : 16,
         });
       }
     }
-  }, [recordData]);
+  }, [recordData, isMobile]);
 
   const handleEdit = async (formData: any) => {
     try {
@@ -90,20 +99,15 @@ const RecordDetailPage: React.FC = () => {
         throw new Error('Bluetooth API не поддерживается в этом браузере');
       }
 
-      // Запрос Bluetooth устройства
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ services: ['battery_service'] }],
         optionalServices: ['serial_port_service'],
       });
 
       console.log('Connected to', device.name);
-
-      // В реальном приложении здесь будет код для отправки на принтер
-      // Сейчас используем fallback на системную печать
       handleSystemPrint();
     } catch (error) {
       console.error('Bluetooth error:', error);
-      // Fallback на системную печать
       handleSystemPrint();
     } finally {
       setIsPrinting(false);
@@ -192,14 +196,17 @@ const RecordDetailPage: React.FC = () => {
 
   return (
     <Box>
+      {/* Заголовок с кнопками */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/records')}
+          size={isMobile ? 'small' : 'medium'}
         >
-          Назад к списку
+          {!isMobile && 'Назад к списку'}
         </Button>
-        {canEdit && (
+        
+        {canEdit && !isMobile && (
           <Button
             variant="contained"
             startIcon={<EditIcon />}
@@ -210,92 +217,106 @@ const RecordDetailPage: React.FC = () => {
         )}
       </Box>
 
-      <Grid container spacing={3}>
+      {/* Новый синтаксис Grid для MUI v7+ */}
+      <Grid container spacing={{ xs: 2, md: 3 }}>
+        {/* Основная информация */}
         <Grid size={{ xs: 12, md: 8 }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom>
+          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography variant={isMobile ? 'h6' : 'h5'} gutterBottom>
               {record.name || 'Информация о записи'}
             </Typography>
             
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Инвентарный номер
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {record.inventoryNumber}
-              </Typography>
-            </Box>
+            <Stack spacing={2} sx={{ mt: 2 }}>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Инвентарный номер
+                </Typography>
+                <Typography variant="body1">
+                  {record.inventoryNumber}
+                </Typography>
+              </Box>
 
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Штрихкод
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {record.barcode}
-              </Typography>
-            </Box>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Штрихкод
+                </Typography>
+                <Typography variant="body1" sx={{ wordBreak: 'break-all' }}>
+                  {record.barcode}
+                </Typography>
+              </Box>
 
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Владелец
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {owner?.fullName || owner?.username}
-              </Typography>
-            </Box>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Владелец
+                </Typography>
+                <Typography variant="body1">
+                  {owner?.fullName || owner?.username}
+                </Typography>
+              </Box>
 
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Дата создания
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
-                  locale: ru,
-                })}
-              </Typography>
-            </Box>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Дата создания
+                </Typography>
+                <Typography variant="body1">
+                  {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
+                    locale: ru,
+                  })}
+                </Typography>
+              </Box>
+            </Stack>
 
             {customFields.length > 0 && (
               <>
-                <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
+                <Divider sx={{ my: 3 }} />
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{ mb: 2 }}>
                   Дополнительные поля
                 </Typography>
 
-                {customFields.map((field: any) => {
-                  const fieldData = field.attributes || field;
-                  const value = record.dynamicData?.[field.id];
-                  if (value === undefined || value === null) return null;
+                <Stack spacing={2}>
+                  {customFields.map((field: any) => {
+                    const fieldData = field.attributes || field;
+                    const value = record.dynamicData?.[field.id];
+                    if (value === undefined || value === null) return null;
 
-                  return (
-                    <Box key={field.id} sx={{ mt: 2 }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        {fieldData.name}
-                      </Typography>
-                      <Typography variant="body1" gutterBottom>
-                        {formatFieldValue(value, fieldData.fieldType)}
-                      </Typography>
-                    </Box>
-                  );
-                })}
+                    return (
+                      <Box key={field.id}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          {fieldData.name}
+                        </Typography>
+                        <Typography variant="body1">
+                          {formatFieldValue(value, fieldData.fieldType)}
+                        </Typography>
+                      </Box>
+                    );
+                  })}
+                </Stack>
               </>
             )}
           </Paper>
         </Grid>
 
+        {/* Штрихкод */}
         <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom align="center">
+              <Typography variant={isMobile ? 'subtitle1' : 'h6'} gutterBottom align="center">
                 Штрихкод
               </Typography>
               <Box display="flex" justifyContent="center" my={2}>
                 <canvas ref={canvasRef} />
               </Box>
-              <Box display="flex" gap={1} justifyContent="center">
+              <Stack 
+                direction={isMobile ? 'column' : 'row'} 
+                spacing={1} 
+                justifyContent="center"
+              >
                 <Button
                   variant="outlined"
                   startIcon={<PrintIcon />}
                   onClick={handleSystemPrint}
+                  size={isMobile ? 'small' : 'medium'}
+                  fullWidth={isMobile}
                 >
                   Печать
                 </Button>
@@ -304,22 +325,60 @@ const RecordDetailPage: React.FC = () => {
                   startIcon={<BluetoothIcon />}
                   onClick={handleBluetoothPrint}
                   disabled={isPrinting}
+                  size={isMobile ? 'small' : 'medium'}
+                  fullWidth={isMobile}
                 >
                   {isPrinting ? 'Подключение...' : 'Bluetooth'}
                 </Button>
-              </Box>
+              </Stack>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
+      {/* Плавающая кнопка редактирования для мобильных */}
+      {canEdit && isMobile && (
+        <Fab
+          color="primary"
+          aria-label="edit"
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+          }}
+          onClick={() => setIsEditDialogOpen(true)}
+        >
+          <EditIcon />
+        </Fab>
+      )}
+
+      {/* Диалог редактирования */}
       <Dialog
         open={isEditDialogOpen}
         onClose={() => setIsEditDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: isMobile ? { 
+            m: 1, 
+            width: 'calc(100% - 16px)',
+            maxHeight: 'calc(100% - 16px)' 
+          } : {}
+        }}
       >
-        <DialogTitle>Редактирование записи</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Редактирование записи</Typography>
+            <IconButton
+              edge="end"
+              color="inherit"
+              onClick={() => setIsEditDialogOpen(false)}
+              aria-label="close"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <DynamicForm
             fields={customFields}

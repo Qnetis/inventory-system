@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   config: {
     locales: ['ru'],
     translations: {
