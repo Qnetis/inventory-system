@@ -14,29 +14,21 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       console.log('Create request data:', data);
       console.log('User:', user);
       
-      // Генерация уникальных идентификаторов если не заданы
-      if (!data.inventoryNumber) {
-        data.inventoryNumber = uuidv4();
-      }
-      
-      if (!data.barcode) {
-        data.barcode = this.generateEAN13();
-      }
+      // Генерация уникальных идентификаторов
+      const inventoryNumber = uuidv4();
+      const barcode = this.generateEAN13();
       
       // Генерация имени записи если не передано
-      if (!data.name) {
-        data.name = `Запись ${data.inventoryNumber.slice(0, 8)}`;
-      }
+      const recordName = data.name || `Запись ${inventoryNumber.slice(0, 8)}`;
       
-      // Устанавливаем владельца если не задан
-      if (!data.owner && user) {
-        data.owner = user.id;
-      }
-      
-      // Создание записи
+      // Создание записи - простой способ для Strapi v5
       const entity = await strapi.entityService.create('api::record.record', {
         data: {
-          ...data,
+          name: recordName,
+          inventoryNumber,
+          barcode,
+          dynamicData: data.dynamicData || {},
+          owner: user.id, // Просто ID пользователя
           publishedAt: new Date()
         }
       });

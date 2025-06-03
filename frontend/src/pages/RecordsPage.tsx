@@ -42,20 +42,19 @@ const RecordsPage: React.FC = () => {
     },
   });
 
-  // Получение записей
-  const { data: recordsData, isLoading, refetch } = useQuery({
+const { data: recordsData, isLoading, refetch, error } = useQuery({
     queryKey: ['records', page, pageSize, searchQuery],
     queryFn: async () => {
       const params: any = {
         'pagination[page]': page + 1,
         'pagination[pageSize]': pageSize,
-        'populate': 'owner',
+        'populate': '*',
       };
 
       if (searchQuery) {
-        params['filters[$or][0][inventoryNumber][$contains]'] = searchQuery;
-        params['filters[$or][1][barcode][$contains]'] = searchQuery;
-        params['filters[$or][2][name][$contains]'] = searchQuery;
+        params['filters[$or][0][inventoryNumber][$containsi]'] = searchQuery;
+        params['filters[$or][1][barcode][$containsi]'] = searchQuery;
+        params['filters[$or][2][name][$containsi]'] = searchQuery;
       }
 
       console.log('Request params:', params); // Для отладки
@@ -64,7 +63,16 @@ const RecordsPage: React.FC = () => {
       console.log('Records response:', data); // Для отладки
       return data;
     },
+    retry: 1,
+    staleTime: 30000, // 30 секунд
   });
+
+  // Показываем ошибку если есть
+  React.useEffect(() => {
+    if (error) {
+      console.error('Error loading records:', error);
+    }
+  }, [error]);
 
   const handleCreateRecord = async (formData: any) => {
     try {

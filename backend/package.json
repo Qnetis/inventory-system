@@ -13,8 +13,8 @@
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry",
-     "fields:reference": "node scripts/generate-fields-reference.js",
-  "fields:help": "node scripts/generate-fields-reference.js"
+    "fields:reference": "node scripts/generate-fields-reference.js",
+    "fields:help": "node scripts/generate-fields-reference.js"
   },
   "dependencies": {
     "@strapi/plugin-cloud": "5.14.0",
