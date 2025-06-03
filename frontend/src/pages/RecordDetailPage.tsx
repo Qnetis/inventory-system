@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// src/pages/RecordDetailPage.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -13,15 +12,10 @@ import {
   Card,
   CardContent,
   CircularProgress,
-
   Dialog,
   DialogTitle,
   DialogContent,
 } from '@mui/material';
-
-
-
-
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
@@ -57,21 +51,24 @@ const RecordDetailPage: React.FC = () => {
   const { data: customFields = [] } = useQuery({
     queryKey: ['customFields'],
     queryFn: async () => {
-      const { data } = await api.get('/api/custom-fields');
+      const { data } = await api.get('/api/custom-fields?sort=order');
       return data.data;
     },
   });
 
   // Генерация штрихкода
   useEffect(() => {
-    if (canvasRef.current && recordData?.attributes?.barcode) {
-      JsBarcode(canvasRef.current, recordData.attributes.barcode, {
-        format: 'EAN13',
-        width: 2,
-        height: 100,
-        displayValue: true,
-        fontSize: 16,
-      });
+    if (canvasRef.current && recordData) {
+      const record = recordData.attributes || recordData;
+      if (record.barcode) {
+        JsBarcode(canvasRef.current, record.barcode, {
+          format: 'EAN13',
+          width: 2,
+          height: 100,
+          displayValue: true,
+          fontSize: 16,
+        });
+      }
     }
   }, [recordData]);
 
@@ -114,6 +111,8 @@ const RecordDetailPage: React.FC = () => {
   };
 
   const handleSystemPrint = () => {
+    const record = recordData?.attributes || recordData;
+    
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
@@ -135,18 +134,23 @@ const RecordDetailPage: React.FC = () => {
             font-weight: bold;
             margin-bottom: 20px;
           }
+          .record-name {
+            font-size: 16px;
+            margin-bottom: 10px;
+          }
           @media print {
             body { margin: 0; }
           }
         </style>
       </head>
       <body>
+        ${record?.name ? `<div class="record-name">${record.name}</div>` : ''}
         <div class="inventory-number">
-          Инв. №: ${recordData?.attributes?.inventoryNumber}
+          Инв. №: ${record?.inventoryNumber}
         </div>
         <canvas id="barcode"></canvas>
         <script>
-          JsBarcode("#barcode", "${recordData?.attributes?.barcode}", {
+          JsBarcode("#barcode", "${record?.barcode}", {
             format: "EAN13",
             width: 2,
             height: 100,
@@ -182,9 +186,9 @@ const RecordDetailPage: React.FC = () => {
     );
   }
 
-  const record = recordData.attributes;
-  const owner = record.owner?.data?.attributes;
-  const canEdit = user?.id === record.owner?.data?.id || user?.role?.type === 'admin';
+  const record = recordData.attributes || recordData;
+  const owner = record.owner?.data?.attributes || record.owner;
+  const canEdit = user?.id === (owner?.id || record.owner?.id) || user?.role?.type === 'admin';
 
   return (
     <Box>
@@ -206,104 +210,108 @@ const RecordDetailPage: React.FC = () => {
         )}
       </Box>
 
-   // В MUI v7 Grid API изменился. Используйте это:
-<Grid container spacing={3}>
-  <Grid size={{ xs: 12, md: 8 }}>
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        Информация о записи
-      </Typography>
-      
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
-          Инвентарный номер
-        </Typography>
-        <Typography variant="body1" gutterBottom>
-          {record.inventoryNumber}
-        </Typography>
-      </Box>
-
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
-          Штрихкод
-        </Typography>
-        <Typography variant="body1" gutterBottom>
-          {record.barcode}
-        </Typography>
-      </Box>
-
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
-          Владелец
-        </Typography>
-        <Typography variant="body1" gutterBottom>
-          {owner?.fullName || owner?.username}
-        </Typography>
-      </Box>
-
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
-          Дата создания
-        </Typography>
-        <Typography variant="body1" gutterBottom>
-          {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
-            locale: ru,
-          })}
-        </Typography>
-      </Box>
-
-      <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
-        Дополнительные поля
-      </Typography>
-
-      {customFields.map((field: any) => {
-        const value = record.dynamicData?.[field.id];
-        if (value === undefined || value === null) return null;
-
-        return (
-          <Box key={field.id} sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary">
-              {field.attributes.name}
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              {record.name || 'Информация о записи'}
             </Typography>
-            <Typography variant="body1" gutterBottom>
-              {formatFieldValue(value, field.attributes.fieldType)}
-            </Typography>
-          </Box>
-        );
-      })}
-    </Paper>
-  </Grid>
+            
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Инвентарный номер
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {record.inventoryNumber}
+              </Typography>
+            </Box>
 
-  <Grid size={{ xs: 12, md: 4 }}>
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom align="center">
-          Штрихкод
-        </Typography>
-        <Box display="flex" justifyContent="center" my={2}>
-          <canvas ref={canvasRef} />
-        </Box>
-        <Box display="flex" gap={1} justifyContent="center">
-          <Button
-            variant="outlined"
-            startIcon={<PrintIcon />}
-            onClick={handleSystemPrint}
-          >
-            Печать
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<BluetoothIcon />}
-            onClick={handleBluetoothPrint}
-            disabled={isPrinting}
-          >
-            {isPrinting ? 'Подключение...' : 'Bluetooth'}
-          </Button>
-        </Box>
-      </CardContent>
-    </Card>
-  </Grid>
-</Grid>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Штрихкод
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {record.barcode}
+              </Typography>
+            </Box>
+
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Владелец
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {owner?.fullName || owner?.username}
+              </Typography>
+            </Box>
+
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Дата создания
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
+                  locale: ru,
+                })}
+              </Typography>
+            </Box>
+
+            {customFields.length > 0 && (
+              <>
+                <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
+                  Дополнительные поля
+                </Typography>
+
+                {customFields.map((field: any) => {
+                  const fieldData = field.attributes || field;
+                  const value = record.dynamicData?.[field.id];
+                  if (value === undefined || value === null) return null;
+
+                  return (
+                    <Box key={field.id} sx={{ mt: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        {fieldData.name}
+                      </Typography>
+                      <Typography variant="body1" gutterBottom>
+                        {formatFieldValue(value, fieldData.fieldType)}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </>
+            )}
+          </Paper>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom align="center">
+                Штрихкод
+              </Typography>
+              <Box display="flex" justifyContent="center" my={2}>
+                <canvas ref={canvasRef} />
+              </Box>
+              <Box display="flex" gap={1} justifyContent="center">
+                <Button
+                  variant="outlined"
+                  startIcon={<PrintIcon />}
+                  onClick={handleSystemPrint}
+                >
+                  Печать
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<BluetoothIcon />}
+                  onClick={handleBluetoothPrint}
+                  disabled={isPrinting}
+                >
+                  {isPrinting ? 'Подключение...' : 'Bluetooth'}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
       <Dialog
         open={isEditDialogOpen}
@@ -315,8 +323,12 @@ const RecordDetailPage: React.FC = () => {
         <DialogContent>
           <DynamicForm
             fields={customFields}
-            defaultValues={record.dynamicData}
+            defaultValues={{
+              name: record.name,
+              ...record.dynamicData,
+            }}
             onSubmit={handleEdit}
+            showNameField={true}
           />
         </DialogContent>
       </Dialog>

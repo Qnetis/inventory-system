@@ -7,38 +7,43 @@ const { v4: uuidv4 } = require('uuid');
 module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   
   async create(ctx) {
-  try {
-    const { data } = ctx.request.body;
-    const user = ctx.state.user;
-    
-    console.log('Create request data:', data);
-    console.log('User:', user);
-    
-    // Генерация уникальных идентификаторов
-    const inventoryNumber = uuidv4();
-    const barcode = this.generateEAN13();
-    
-    // Создание записи - упрощенный вариант
-    const entity = await strapi.entityService.create('api::record.record', {
-      data: {
-        inventoryNumber,
-        barcode,
-        dynamicData: data.dynamicData || {},
-        owner: user.id,
-        publishedAt: new Date() // Добавьте это для Strapi v4
-      }
-    });
-    
-    return {
-      data: entity,
-      meta: {}
-    };
-    
-  } catch (error) {
-    console.error('Create error:', error);
-    ctx.throw(500, error.message);
-  }
-},
+    try {
+      const { data } = ctx.request.body;
+      const user = ctx.state.user;
+      
+      console.log('Create request data:', data);
+      console.log('User:', user);
+      
+      // Генерация уникальных идентификаторов
+      const inventoryNumber = uuidv4();
+      const barcode = this.generateEAN13();
+      
+      // Генерация имени записи если не передано
+      const recordName = data.name || `Запись ${inventoryNumber.slice(0, 8)}`;
+      
+      // Создание записи
+      const entity = await strapi.entityService.create('api::record.record', {
+        data: {
+          name: recordName,
+          inventoryNumber,
+          barcode,
+          dynamicData: data.dynamicData || {},
+          owner: user.id,
+          publishedAt: new Date()
+        },
+        populate: ['owner']
+      });
+      
+      return {
+        data: entity,
+        meta: {}
+      };
+      
+    } catch (error) {
+      console.error('Create error:', error);
+      ctx.throw(500, error.message);
+    }
+  },
   
   async find(ctx) {
     const user = ctx.state.user;
@@ -74,11 +79,10 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     }
     
     // Проверяем права доступа
-    if (!user.isAdmin && user.role?.type !== 'admin' && entity.owner.id !== user.id) {
+    if (!user.isAdmin && user.role?.type !== 'admin' && entity.owner?.id !== user.id) {
       return ctx.forbidden('Access denied');
     }
     
-    // Возвращаем в формате Strapi
     return {
       data: entity,
       meta: {}
@@ -100,13 +104,14 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     }
     
     // Проверяем права на редактирование
-    if (!user.isAdmin && user.role?.type !== 'admin' && existingEntity.owner.id !== user.id) {
+    if (!user.isAdmin && user.role?.type !== 'admin' && existingEntity.owner?.id !== user.id) {
       return ctx.forbidden('You can only edit your own records');
     }
     
     // Валидация динамических полей
     const customFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
-      sort: { order: 'asc' }
+      sort: { order: 'asc' },
+      filters: { publishedAt: { $notNull: true } }
     });
     
     const errors = [];
@@ -123,6 +128,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     // Обновляем запись
     const entity = await strapi.entityService.update('api::record.record', id, {
       data: {
+        name: data.name || existingEntity.name,
         dynamicData: data.dynamicData || existingEntity.dynamicData
       },
       populate: ['owner']
@@ -148,7 +154,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     }
     
     // Проверяем права на удаление
-    if (!user.isAdmin && user.role?.type !== 'admin' && entity.owner.id !== user.id) {
+    if (!user.isAdmin && user.role?.type !== 'admin' && entity.owner?.id !== user.id) {
       return ctx.forbidden('You can only delete your own records');
     }
     
@@ -322,7 +328,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   
   // Вспомогательные методы
   
-  generateEAN13() {
+ generateEAN13() {
     const code = Array.from({ length: 12 }, () => 
       Math.floor(Math.random() * 10)
     ).join('');

@@ -36,53 +36,65 @@ const RecordsPage: React.FC = () => {
   const { data: customFields = [] } = useQuery({
     queryKey: ['customFields'],
     queryFn: async () => {
-      const { data } = await api.get('/api/custom-fields');
+      const { data } = await api.get('/api/custom-fields?sort=order');
       console.log('Custom fields response:', data);
       return data.data;
     },
   });
 
   // Получение записей
-const { data: recordsData, isLoading, refetch } = useQuery({
-  queryKey: ['records', page, pageSize, searchQuery],
-  queryFn: async () => {
-    const params: any = {
-      'pagination[page]': page + 1,
-      'pagination[pageSize]': pageSize,
-     // 'populate': '*', // Упрощенный вариант
-    };
+  const { data: recordsData, isLoading, refetch } = useQuery({
+    queryKey: ['records', page, pageSize, searchQuery],
+    queryFn: async () => {
+      const params: any = {
+        'pagination[page]': page + 1,
+        'pagination[pageSize]': pageSize,
+        'populate': 'owner',
+      };
 
-    if (searchQuery) {
-      params['filters[$or][0][inventoryNumber][$contains]'] = searchQuery;
-      params['filters[$or][1][barcode][$contains]'] = searchQuery;
+      if (searchQuery) {
+        params['filters[$or][0][inventoryNumber][$contains]'] = searchQuery;
+        params['filters[$or][1][barcode][$contains]'] = searchQuery;
+        params['filters[$or][2][name][$contains]'] = searchQuery;
+      }
+
+      console.log('Request params:', params); // Для отладки
+      
+      const { data } = await api.get('/api/records', { params });
+      console.log('Records response:', data); // Для отладки
+      return data;
+    },
+  });
+
+  const handleCreateRecord = async (formData: any) => {
+    try {
+      console.log('Creating record with data:', formData);
+      
+      const response = await api.post('/api/records', { 
+        data: formData 
+      });
+      
+      console.log('Create response:', response);
+      
+      setIsCreateDialogOpen(false);
+      refetch();
+    } catch (error: any) {
+      console.error('Error creating record:', error);
+      console.error('Error response:', error.response?.data);
+      
+      // Более детальная информация об ошибке
+      let errorMessage = 'Неизвестная ошибка';
+      if (error.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message;
+      } else if (error.response?.data?.error?.details?.errors) {
+        errorMessage = error.response.data.error.details.errors.map((e: any) => e.message).join(', ');
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(`Ошибка: ${errorMessage}`);
     }
-
-    console.log('Request params:', params); // Для отладки
-    
-    const { data } = await api.get('/api/records', { params });
-    console.log('Records response:', data); // Для отладки
-    return data;
-  },
-});
-
-const handleCreateRecord = async (formData: any) => {
-  try {
-    console.log('Creating record with data:', formData);
-    
-    const response = await api.post('/api/records', { 
-      data: formData 
-    });
-    
-    console.log('Create response:', response);
-    
-    setIsCreateDialogOpen(false);
-    refetch();
-  } catch (error: any) {
-    console.error('Error creating record:', error);
-    console.error('Error response:', error.response?.data);
-    alert(`Ошибка: ${error.response?.data?.error?.message || 'Неизвестная ошибка'}`);
-  }
-};
+  };
 
   const handleRowClick = (record: any) => {
     navigate(`/records/${record.id}`);
@@ -105,7 +117,7 @@ const handleCreateRecord = async (formData: any) => {
         <TextField
           fullWidth
           variant="outlined"
-          placeholder="Поиск по инвентарному номеру или штрихкоду"
+          placeholder="Поиск по инвентарному номеру, штрихкоду или названию"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           InputProps={{
@@ -148,6 +160,7 @@ const handleCreateRecord = async (formData: any) => {
           <DynamicForm
             fields={customFields}
             onSubmit={handleCreateRecord}
+            showNameField={true}
           />
         </DialogContent>
         <DialogActions>

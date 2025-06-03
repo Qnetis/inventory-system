@@ -27,7 +27,6 @@ interface RecordsTableProps {
   onPageSizeChange: (size: number) => void;
   onRowClick: (record: any) => void;
 }
-
 const RecordsTable: React.FC<RecordsTableProps> = ({
   records,
   customFields,
@@ -56,41 +55,58 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
               <TableCell>Инв. номер</TableCell>
               <TableCell>Штрихкод</TableCell>
               {customFields.slice(0, 3).map((field) => (
-                <TableCell key={field.id}>{field.name}</TableCell>
+                <TableCell key={field.id}>
+                  {field.attributes?.name || field.name}
+                </TableCell>
               ))}
               <TableCell>Владелец</TableCell>
               <TableCell>Дата создания</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-           // В RecordsTable.tsx измените отображение данных:
-{records.map((record) => (
-  <TableRow
-    key={record.id}
-    hover
-    onClick={() => onRowClick(record)}
-    sx={{ cursor: 'pointer' }}
-  >
-    <TableCell>{record.inventoryNumber}</TableCell>
-    <TableCell>{record.barcode}</TableCell>
-    {customFields.slice(0, 3).map((field) => (
-      <TableCell key={field.id}>
-        {formatFieldValue(
-          record.dynamicData?.[field.id],
-          field.fieldType
-        )}
-      </TableCell>
-    ))}
-    <TableCell>
-      {record.owner?.fullName || record.owner?.username || '-'}
-    </TableCell>
-    <TableCell>
-      {format(new Date(record.createdAt), 'dd.MM.yyyy', {
-        locale: ru,
-      })}
-    </TableCell>
-  </TableRow>
-))}
+            {records.map((record) => {
+              // Определяем структуру данных в зависимости от версии Strapi
+              const recordData = record.attributes || record;
+              const ownerData = recordData.owner?.data?.attributes || recordData.owner;
+              
+              return (
+                <TableRow
+                  key={record.id}
+                  hover
+                  onClick={() => onRowClick(record)}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  <TableCell>{recordData.inventoryNumber}</TableCell>
+                  <TableCell>{recordData.barcode}</TableCell>
+                  {customFields.slice(0, 3).map((field) => {
+                    const fieldData = field.attributes || field;
+                    return (
+                      <TableCell key={field.id}>
+                        {formatFieldValue(
+                          recordData.dynamicData?.[field.id],
+                          fieldData.fieldType
+                        )}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell>
+                    {ownerData?.fullName || ownerData?.username || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {format(new Date(recordData.createdAt), 'dd.MM.yyyy', {
+                      locale: ru,
+                    })}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {records.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5 + customFields.slice(0, 3).length} align="center">
+                  Записи не найдены
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -107,6 +123,7 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
     </Paper>
   );
 };
+
 
 function formatFieldValue(value: any, fieldType: string): string {
   if (value === null || value === undefined) return '-';

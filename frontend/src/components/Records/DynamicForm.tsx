@@ -14,6 +14,7 @@ import {
   FormHelperText,
   Button,
   Box,
+  Typography,
 } from '@mui/material';
 import { Controller, useForm } from 'react-hook-form';
 
@@ -21,33 +22,39 @@ interface DynamicFormProps {
   fields: any[];
   onSubmit: (data: any) => void;
   defaultValues?: any;
+  showNameField?: boolean;
 }
 
 const DynamicForm: React.FC<DynamicFormProps> = ({
   fields,
   onSubmit,
   defaultValues,
+  showNameField = false,
 }) => {
   const { control, handleSubmit, formState: { errors } } = useForm({
-    defaultValues: defaultValues || {},
+    defaultValues: {
+      name: defaultValues?.name || '',
+      ...defaultValues,
+    },
   });
 
   console.log('DynamicForm fields:', fields); // Для отладки
 
   const renderField = (field: any) => {
+    const fieldData = field.attributes || field;
     const fieldName = field.id.toString();
 
-    switch (field.fieldType) {
+    switch (fieldData.fieldType) {
       case 'TEXT':
         return (
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.isRequired }}
+            rules={{ required: fieldData.isRequired }}
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
-                label={field.name}
+                label={fieldData.name}
                 value={value || ''}
                 onChange={onChange}
                 error={!!errors[fieldName]}
@@ -62,12 +69,12 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.isRequired }}
+            rules={{ required: fieldData.isRequired }}
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
                 type="number"
-                label={field.name}
+                label={fieldData.name}
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
                 error={!!errors[fieldName]}
@@ -82,12 +89,12 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.isRequired }}
+            rules={{ required: fieldData.isRequired }}
             render={({ field: { onChange, value } }) => (
               <TextField
                 fullWidth
                 type="number"
-                label={field.name}
+                label={fieldData.name}
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
                 InputProps={{
@@ -105,19 +112,19 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           <Controller
             name={fieldName}
             control={control}
-            rules={{ required: field.isRequired }}
+            rules={{ required: fieldData.isRequired }}
             render={({ field: { onChange, value } }) => (
               <FormControl fullWidth error={!!errors[fieldName]}>
-                <InputLabel>{field.name}</InputLabel>
+                <InputLabel>{fieldData.name}</InputLabel>
                 <Select
                   value={value || ''}
                   onChange={onChange}
-                  label={field.name}
+                  label={fieldData.name}
                 >
                   <MenuItem value="">
                     <em>Не выбрано</em>
                   </MenuItem>
-                  {field.options?.map((option: string) => (
+                  {fieldData.options?.map((option: string) => (
                     <MenuItem key={option} value={option}>
                       {option}
                     </MenuItem>
@@ -144,7 +151,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                     onChange={(e) => onChange(e.target.checked)}
                   />
                 }
-                label={field.name}
+                label={fieldData.name}
               />
             )}
           />
@@ -159,6 +166,14 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     console.log('Form data before submit:', data); // Для отладки
     
     const dynamicData: any = {};
+    const result: any = {};
+    
+    // Добавляем имя записи если есть
+    if (showNameField && data.name) {
+      result.name = data.name;
+    }
+    
+    // Формируем динамические данные
     fields.forEach((field) => {
       const value = data[field.id];
       if (value !== undefined && value !== '') {
@@ -166,18 +181,48 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
       }
     });
 
-    console.log('Dynamic data to submit:', dynamicData); // Для отладки
-    onSubmit({ dynamicData });
+    result.dynamicData = dynamicData;
+
+    console.log('Data to submit:', result); // Для отладки
+    onSubmit(result);
   };
 
   if (!fields || fields.length === 0) {
-    return <div>Нет полей для отображения</div>;
+    return (
+      <Box sx={{ textAlign: 'center', py: 4 }}>
+        <Typography color="text.secondary">
+          Нет полей для отображения. Обратитесь к администратору для настройки полей.
+        </Typography>
+      </Box>
+    );
   }
 
   return (
     <Box component="form" onSubmit={handleSubmit(onFormSubmit)}>
+      {showNameField && (
+        <Box sx={{ mb: 2 }}>
+          <Controller
+            name="name"
+            control={control}
+            render={({ field: { onChange, value } }) => (
+              <TextField
+                fullWidth
+                label="Название записи (необязательно)"
+                value={value || ''}
+                onChange={onChange}
+                helperText="Если не указано, будет сгенерировано автоматически"
+              />
+            )}
+          />
+        </Box>
+      )}
+
       {fields
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .sort((a, b) => {
+          const aOrder = (a.attributes?.order || a.order) || 0;
+          const bOrder = (b.attributes?.order || b.order) || 0;
+          return aOrder - bOrder;
+        })
         .map((field) => (
           <Box key={field.id} sx={{ mt: 2 }}>
             {renderField(field)}
