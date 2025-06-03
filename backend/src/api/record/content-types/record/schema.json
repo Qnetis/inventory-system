@@ -4,27 +4,99 @@
   "info": {
     "singularName": "record",
     "pluralName": "records",
-    "displayName": "Record"
+    "displayName": "Record",
+    "description": "Записи инвентаризации"
   },
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "content-manager": {
+      "visible": true
+    },
+    "content-type-builder": {
+      "visible": true
+    }
+  },
   "attributes": {
     "inventoryNumber": {
       "type": "string",
-      "required": true
+      "required": true,
+      "unique": true,
+      "configurable": false,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Инвентарный номер",
+            "description": "Генерируется автоматически при создании",
+            "placeholder": "Будет сгенерирован автоматически",
+            "visible": true,
+            "editable": false
+          }
+        }
+      }
     },
     "barcode": {
       "type": "string",
-      "required": true
-    },
-    "dynamicData": {
-      "type": "json"
+      "required": true,
+      "unique": true,
+      "configurable": false,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Штрихкод EAN-13",
+            "description": "Генерируется автоматически при создании",
+            "placeholder": "Будет сгенерирован автоматически",
+            "visible": true,
+            "editable": false
+          }
+        }
+      }
     },
     "name": {
       "type": "string",
-      "required": false
+      "required": false,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Название записи",
+            "description": "Необязательное поле для удобства",
+            "placeholder": "Введите название"
+          }
+        }
+      }
+    },
+    "dynamicData": {
+      "type": "json",
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Кастомные поля (JSON)",
+            "description": "Введите данные в формате JSON. Пример: {\"1\": \"значение\", \"2\": 123}. ID полей смотрите в разделе Custom Fields",
+            "placeholder": "{\n  \"ID_поля\": \"значение\"\n}"
+          }
+        }
+      }
+    },
+    "owner": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "records",
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Владелец",
+            "description": "Пользователь-владелец записи",
+            "mainField": "username"
+          }
+        }
+      }
     }
   }
 }

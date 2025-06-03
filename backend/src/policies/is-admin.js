@@ -1,5 +1,12 @@
 module.exports = async (ctx, next) => {
-  if (ctx.state.user && ctx.state.user.isAdmin) {
+  const user = ctx.state.user;
+  
+  if (!user) {
+    return ctx.unauthorized('You must be logged in');
+  }
+  
+  // Проверяем роль пользователя
+  if (user.role?.type === 'admin') {
     return next();
   }
   

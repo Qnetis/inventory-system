@@ -376,6 +376,7 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
 export interface ApiCustomFieldCustomField extends Struct.CollectionTypeSchema {
   collectionName: 'custom_fields';
   info: {
+    description: '\u041A\u0430\u0441\u0442\u043E\u043C\u043D\u044B\u0435 \u043F\u043E\u043B\u044F \u0434\u043B\u044F \u0437\u0430\u043F\u0438\u0441\u0435\u0439';
     displayName: 'Custom Field';
     pluralName: 'custom-fields';
     singularName: 'custom-field';
@@ -383,24 +384,115 @@ export interface ApiCustomFieldCustomField extends Struct.CollectionTypeSchema {
   options: {
     draftAndPublish: true;
   };
+  pluginOptions: {
+    'content-manager': {
+      visible: true;
+    };
+    'content-type-builder': {
+      visible: true;
+    };
+  };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    fieldId: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439\u0442\u0435 ID \u0437\u0430\u043F\u0438\u0441\u0438 \u0434\u043B\u044F \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F dynamicData \u0432 Records';
+            label: 'ID \u043F\u043E\u043B\u044F (\u0434\u043B\u044F JSON)';
+            visible: false;
+          };
+          list: {
+            label: 'ID';
+            searchable: false;
+            sortable: false;
+          };
+          visible: true;
+        };
+      }>;
     fieldType: Schema.Attribute.Enumeration<
       ['TEXT', 'NUMBER', 'MONEY', 'SELECT', 'CHECKBOX']
     > &
-      Schema.Attribute.Required;
-    isRequired: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0442\u0438\u043F \u0434\u0430\u043D\u043D\u044B\u0445 \u0434\u043B\u044F \u043F\u043E\u043B\u044F';
+            label: '\u0422\u0438\u043F \u043F\u043E\u043B\u044F';
+          };
+          list: {
+            label: '\u0422\u0438\u043F';
+            searchable: true;
+            sortable: true;
+          };
+          visible: true;
+        };
+      }>;
+    isRequired: Schema.Attribute.Boolean &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u0414\u043E\u043B\u0436\u043D\u043E \u043B\u0438 \u044D\u0442\u043E \u043F\u043E\u043B\u0435 \u0431\u044B\u0442\u044C \u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u043C \u0434\u043B\u044F \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F';
+            label: '\u041E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u043F\u043E\u043B\u0435';
+          };
+          list: {
+            label: '\u041E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0435';
+          };
+          visible: true;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::custom-field.custom-field'
     > &
       Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    options: Schema.Attribute.JSON;
-    order: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    name: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u041E\u0442\u043E\u0431\u0440\u0430\u0436\u0430\u0435\u043C\u043E\u0435 \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043F\u043E\u043B\u044F';
+            label: '\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043F\u043E\u043B\u044F';
+            placeholder: '\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0442\u043E\u0432\u0430\u0440\u0430';
+          };
+          list: {
+            label: '\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435';
+            searchable: true;
+            sortable: true;
+          };
+          visible: true;
+        };
+      }>;
+    options: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u041C\u0430\u0441\u0441\u0438\u0432 \u043E\u043F\u0446\u0438\u0439 \u0434\u043B\u044F \u0432\u044B\u043F\u0430\u0434\u0430\u044E\u0449\u0435\u0433\u043E \u0441\u043F\u0438\u0441\u043A\u0430. \u041F\u0440\u0438\u043C\u0435\u0440: ["\u041E\u043F\u0446\u0438\u044F 1", "\u041E\u043F\u0446\u0438\u044F 2"]';
+            label: '\u041E\u043F\u0446\u0438\u0438 (\u0434\u043B\u044F SELECT)';
+            placeholder: '["\u041E\u043F\u0446\u0438\u044F 1", "\u041E\u043F\u0446\u0438\u044F 2", "\u041E\u043F\u0446\u0438\u044F 3"]';
+          };
+          visible: true;
+        };
+      }>;
+    order: Schema.Attribute.Integer &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u041F\u043E\u0440\u044F\u0434\u043E\u043A \u043E\u0442\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F \u043F\u043E\u043B\u044F (\u043C\u0435\u043D\u044C\u0448\u0435 = \u0432\u044B\u0448\u0435)';
+            label: '\u041F\u043E\u0440\u044F\u0434\u043E\u043A \u043E\u0442\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F';
+          };
+          list: {
+            label: '\u041F\u043E\u0440\u044F\u0434\u043E\u043A';
+            sortable: true;
+          };
+          visible: true;
+        };
+      }> &
+      Schema.Attribute.DefaultTo<0>;
     publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -411,6 +503,7 @@ export interface ApiCustomFieldCustomField extends Struct.CollectionTypeSchema {
 export interface ApiRecordRecord extends Struct.CollectionTypeSchema {
   collectionName: 'records';
   info: {
+    description: '\u0417\u0430\u043F\u0438\u0441\u0438 \u0438\u043D\u0432\u0435\u043D\u0442\u0430\u0440\u0438\u0437\u0430\u0446\u0438\u0438';
     displayName: 'Record';
     pluralName: 'records';
     singularName: 'record';
@@ -418,20 +511,90 @@ export interface ApiRecordRecord extends Struct.CollectionTypeSchema {
   options: {
     draftAndPublish: true;
   };
+  pluginOptions: {
+    'content-manager': {
+      visible: true;
+    };
+    'content-type-builder': {
+      visible: true;
+    };
+  };
   attributes: {
-    barcode: Schema.Attribute.String & Schema.Attribute.Required;
+    barcode: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u0413\u0435\u043D\u0435\u0440\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0440\u0438 \u0441\u043E\u0437\u0434\u0430\u043D\u0438\u0438';
+            editable: false;
+            label: '\u0428\u0442\u0440\u0438\u0445\u043A\u043E\u0434 EAN-13';
+            placeholder: '\u0411\u0443\u0434\u0435\u0442 \u0441\u0433\u0435\u043D\u0435\u0440\u0438\u0440\u043E\u0432\u0430\u043D \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438';
+            visible: true;
+          };
+          visible: true;
+        };
+      }>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    dynamicData: Schema.Attribute.JSON;
-    inventoryNumber: Schema.Attribute.String & Schema.Attribute.Required;
+    dynamicData: Schema.Attribute.JSON &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0432 \u0444\u043E\u0440\u043C\u0430\u0442\u0435 JSON. \u041F\u0440\u0438\u043C\u0435\u0440: {"1": "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435", "2": 123}. ID \u043F\u043E\u043B\u0435\u0439 \u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0432 \u0440\u0430\u0437\u0434\u0435\u043B\u0435 Custom Fields';
+            label: '\u041A\u0430\u0441\u0442\u043E\u043C\u043D\u044B\u0435 \u043F\u043E\u043B\u044F (JSON)';
+            placeholder: '{\n  "ID_\u043F\u043E\u043B\u044F": "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"\n}';
+          };
+          visible: true;
+        };
+      }>;
+    inventoryNumber: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u0413\u0435\u043D\u0435\u0440\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0440\u0438 \u0441\u043E\u0437\u0434\u0430\u043D\u0438\u0438';
+            editable: false;
+            label: '\u0418\u043D\u0432\u0435\u043D\u0442\u0430\u0440\u043D\u044B\u0439 \u043D\u043E\u043C\u0435\u0440';
+            placeholder: '\u0411\u0443\u0434\u0435\u0442 \u0441\u0433\u0435\u043D\u0435\u0440\u0438\u0440\u043E\u0432\u0430\u043D \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438';
+            visible: true;
+          };
+          visible: true;
+        };
+      }>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::record.record'
     > &
       Schema.Attribute.Private;
-    name: Schema.Attribute.String;
+    name: Schema.Attribute.String &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u041D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u043F\u043E\u043B\u0435 \u0434\u043B\u044F \u0443\u0434\u043E\u0431\u0441\u0442\u0432\u0430';
+            label: '\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u043F\u0438\u0441\u0438';
+            placeholder: '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u0435';
+          };
+          visible: true;
+        };
+      }>;
+    owner: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    > &
+      Schema.Attribute.SetPluginOptions<{
+        'content-manager': {
+          edit: {
+            description: '\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C-\u0432\u043B\u0430\u0434\u0435\u043B\u0435\u0446 \u0437\u0430\u043F\u0438\u0441\u0438';
+            label: '\u0412\u043B\u0430\u0434\u0435\u043B\u0435\u0446';
+            mainField: 'username';
+          };
+          visible: true;
+        };
+      }>;
     publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -922,6 +1085,7 @@ export interface PluginUsersPermissionsUser
     phone: Schema.Attribute.String;
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    records: Schema.Attribute.Relation<'oneToMany', 'api::record.record'>;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
     role: Schema.Attribute.Relation<
       'manyToOne',

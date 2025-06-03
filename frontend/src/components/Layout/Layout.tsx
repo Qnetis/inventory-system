@@ -12,6 +12,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  CircularProgress,
 } from '@mui/material';
 import {
   Inventory as InventoryIcon,
@@ -23,12 +24,22 @@ import { useAuth } from '../../contexts/AuthContext';
 const drawerWidth = 240;
 
 const Layout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  if (!user) {
-    return <Navigate to="/login" />;
+  // Показываем загрузку пока проверяем авторизацию
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Если не авторизован, перенаправляем на логин
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
   }
 
   const handleLogout = () => {
@@ -101,4 +112,5 @@ const Layout: React.FC = () => {
     </Box>
   );
 };
+
 export default Layout;

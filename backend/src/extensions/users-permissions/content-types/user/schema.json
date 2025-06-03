@@ -71,6 +71,12 @@
     },
     "phone": {
       "type": "string"
+    },
+    "records": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::record.record",
+      "mappedBy": "owner"
     }
   }
 }

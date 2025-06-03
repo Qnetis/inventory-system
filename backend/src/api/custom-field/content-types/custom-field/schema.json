@@ -4,16 +4,39 @@
   "info": {
     "singularName": "custom-field",
     "pluralName": "custom-fields",
-    "displayName": "Custom Field"
+    "displayName": "Custom Field",
+    "description": "Кастомные поля для записей"
   },
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "content-manager": {
+      "visible": true
+    },
+    "content-type-builder": {
+      "visible": true
+    }
+  },
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": true,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Название поля",
+            "description": "Отображаемое название поля",
+            "placeholder": "Например: Название товара"
+          },
+          "list": {
+            "label": "Название",
+            "searchable": true,
+            "sortable": true
+          }
+        }
+      }
     },
     "fieldType": {
       "type": "enumeration",
@@ -24,18 +47,85 @@
         "MONEY",
         "SELECT",
         "CHECKBOX"
-      ]
+      ],
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Тип поля",
+            "description": "Выберите тип данных для поля"
+          },
+          "list": {
+            "label": "Тип",
+            "searchable": true,
+            "sortable": true
+          }
+        }
+      }
     },
     "isRequired": {
       "type": "boolean",
-      "default": false
+      "default": false,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Обязательное поле",
+            "description": "Должно ли это поле быть обязательным для заполнения"
+          },
+          "list": {
+            "label": "Обязательное"
+          }
+        }
+      }
     },
     "options": {
-      "type": "json"
+      "type": "json",
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Опции (для SELECT)",
+            "description": "Массив опций для выпадающего списка. Пример: [\"Опция 1\", \"Опция 2\"]",
+            "placeholder": "[\"Опция 1\", \"Опция 2\", \"Опция 3\"]"
+          }
+        }
+      }
     },
     "order": {
       "type": "integer",
-      "default": 0
+      "default": 0,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "Порядок отображения",
+            "description": "Порядок отображения поля (меньше = выше)"
+          },
+          "list": {
+            "label": "Порядок",
+            "sortable": true
+          }
+        }
+      }
+    },
+    "fieldId": {
+      "type": "string",
+      "pluginOptions": {
+        "content-manager": {
+          "visible": true,
+          "edit": {
+            "label": "ID поля (для JSON)",
+            "description": "Используйте ID записи для заполнения dynamicData в Records",
+            "visible": false
+          },
+          "list": {
+            "label": "ID",
+            "searchable": false,
+            "sortable": false
+          }
+        }
+      }
     }
   }
 }

@@ -14,28 +14,40 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       console.log('Create request data:', data);
       console.log('User:', user);
       
-      // Генерация уникальных идентификаторов
-      const inventoryNumber = uuidv4();
-      const barcode = this.generateEAN13();
+      // Генерация уникальных идентификаторов если не заданы
+      if (!data.inventoryNumber) {
+        data.inventoryNumber = uuidv4();
+      }
+      
+      if (!data.barcode) {
+        data.barcode = this.generateEAN13();
+      }
       
       // Генерация имени записи если не передано
-      const recordName = data.name || `Запись ${inventoryNumber.slice(0, 8)}`;
+      if (!data.name) {
+        data.name = `Запись ${data.inventoryNumber.slice(0, 8)}`;
+      }
+      
+      // Устанавливаем владельца если не задан
+      if (!data.owner && user) {
+        data.owner = user.id;
+      }
       
       // Создание записи
       const entity = await strapi.entityService.create('api::record.record', {
         data: {
-          name: recordName,
-          inventoryNumber,
-          barcode,
-          dynamicData: data.dynamicData || {},
-          owner: user.id,
+          ...data,
           publishedAt: new Date()
-        },
+        }
+      });
+      
+      // Получаем созданную запись с populate
+      const populatedEntity = await strapi.entityService.findOne('api::record.record', entity.id, {
         populate: ['owner']
       });
       
       return {
-        data: entity,
+        data: populatedEntity,
         meta: {}
       };
       
@@ -46,47 +58,53 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   },
   
   async find(ctx) {
-    const user = ctx.state.user;
-    
-    // Только свои записи для обычных пользователей
-    if (!user.isAdmin && user.role?.type !== 'admin') {
-      ctx.query = {
-        ...ctx.query,
-        filters: {
-          ...ctx.query.filters,
-          owner: { id: user.id }
+    try {
+      const user = ctx.state.user;
+      
+      // Для обычных пользователей добавляем фильтр по владельцу
+      if (user.role?.type !== 'admin') {
+        // Правильный формат фильтра для Strapi v5
+        if (!ctx.query.filters) {
+          ctx.query.filters = {};
         }
-      };
+        ctx.query.filters.owner = user.id;
+      }
+      
+      // Устанавливаем populate если не задан
+      if (!ctx.query.populate) {
+        ctx.query.populate = ['owner'];
+      }
+      
+      // Вызываем родительский метод find
+      const response = await super.find(ctx);
+      
+      return response;
+    } catch (error) {
+      console.error('Find error:', error);
+      ctx.throw(500, error.message);
     }
-    
-    // Вызываем родительский метод find
-    const { data, meta } = await super.find(ctx);
-    
-    return { data, meta };
   },
   
   async findOne(ctx) {
     const { id } = ctx.params;
     const user = ctx.state.user;
     
-    // Получаем запись
-    const entity = await strapi.entityService.findOne('api::record.record', id, {
-      populate: ['owner']
-    });
+    // Вызываем родительский метод findOne
+    const response = await super.findOne(ctx);
     
-    if (!entity) {
+    if (!response || !response.data) {
       return ctx.notFound('Record not found');
     }
     
+    const record = response.data;
+    const ownerId = record.attributes?.owner?.data?.id || record.owner?.id;
+    
     // Проверяем права доступа
-    if (!user.isAdmin && user.role?.type !== 'admin' && entity.owner?.id !== user.id) {
+    if (user.role?.type !== 'admin' && ownerId !== user.id) {
       return ctx.forbidden('Access denied');
     }
     
-    return {
-      data: entity,
-      meta: {}
-    };
+    return response;
   },
   
   async update(ctx) {
@@ -103,8 +121,10 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       return ctx.notFound('Record not found');
     }
     
+    const ownerId = existingEntity.owner?.id;
+    
     // Проверяем права на редактирование
-    if (!user.isAdmin && user.role?.type !== 'admin' && existingEntity.owner?.id !== user.id) {
+    if (user.role?.type !== 'admin' && ownerId !== user.id) {
       return ctx.forbidden('You can only edit your own records');
     }
     
@@ -153,18 +173,15 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       return ctx.notFound('Record not found');
     }
     
+    const ownerId = entity.owner?.id;
+    
     // Проверяем права на удаление
-    if (!user.isAdmin && user.role?.type !== 'admin' && entity.owner?.id !== user.id) {
+    if (user.role?.type !== 'admin' && ownerId !== user.id) {
       return ctx.forbidden('You can only delete your own records');
     }
     
-    // Удаляем запись
-    const deletedEntity = await strapi.entityService.delete('api::record.record', id);
-    
-    return {
-      data: deletedEntity,
-      meta: {}
-    };
+    // Вызываем родительский метод delete
+    return super.delete(ctx);
   },
   
   // Дополнительные методы
@@ -173,7 +190,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     try {
       // Проверка прав админа
       const user = ctx.state.user;
-      if (!user.isAdmin && user.role?.type !== 'admin') {
+      if (user.role?.type !== 'admin') {
         return ctx.forbidden('Only admins can view statistics');
       }
       
@@ -218,8 +235,10 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       const userStats = {};
       
       for (const record of records) {
-        const userId = record.owner.id;
-        const userName = record.owner.fullName || record.owner.username;
+        const userId = record.owner?.id;
+        const userName = record.owner?.fullName || record.owner?.username;
+        
+        if (!userId) continue;
         
         if (!userStats[userId]) {
           userStats[userId] = {
@@ -251,7 +270,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     try {
       // Проверка прав админа
       const user = ctx.state.user;
-      if (!user.isAdmin && user.role?.type !== 'admin') {
+      if (user.role?.type !== 'admin') {
         return ctx.forbidden('Only admins can export data');
       }
       
@@ -284,51 +303,9 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     }
   },
   
-  async barcode(ctx) {
-    try {
-      const { id } = ctx.params;
-      const JsBarcode = require('jsbarcode');
-      const { createCanvas } = require('canvas');
-      
-      const record = await strapi.entityService.findOne('api::record.record', id);
-      
-      if (!record) {
-        return ctx.notFound('Record not found');
-      }
-      
-      const canvas = createCanvas(400, 200);
-      const context = canvas.getContext('2d');
-      
-      // Белый фон
-      context.fillStyle = 'white';
-      context.fillRect(0, 0, 400, 200);
-      
-      // Текст инвентарного номера
-      context.fillStyle = 'black';
-      context.font = 'bold 20px Arial';
-      context.textAlign = 'center';
-      context.fillText(`Инв. №: ${record.inventoryNumber}`, 200, 40);
-      
-      // Генерация штрихкода
-      JsBarcode(canvas, record.barcode, {
-        format: "EAN13",
-        width: 2,
-        height: 100,
-        displayValue: true,
-        marginTop: 60
-      });
-      
-      ctx.set('Content-Type', 'image/png');
-      ctx.body = canvas.toBuffer('image/png');
-      
-    } catch (error) {
-      ctx.throw(500, error);
-    }
-  },
-  
   // Вспомогательные методы
   
- generateEAN13() {
+  generateEAN13() {
     const code = Array.from({ length: 12 }, () => 
       Math.floor(Math.random() * 10)
     ).join('');
