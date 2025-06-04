@@ -24,6 +24,8 @@ import {
   Checkbox,
   FormControlLabel,
   Chip,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -48,11 +50,17 @@ const FieldManagement: React.FC = () => {
   const [newOption, setNewOption] = useState('');
 
   // Получение полей
-  const { data: fields = [] } = useQuery({
+  const { data: fields = [], isLoading, error } = useQuery({
     queryKey: ['customFields'],
     queryFn: async () => {
-      const { data } = await api.get('/api/custom-fields?sort=order');
-      return data.data;
+      try {
+        const { data } = await api.get('/api/custom-fields?sort=order');
+        console.log('Custom fields response:', data);
+        return data.data || [];
+      } catch (error) {
+        console.error('Error fetching custom fields:', error);
+        throw error;
+      }
     },
   });
 
@@ -81,13 +89,15 @@ const FieldManagement: React.FC = () => {
 
   const handleOpenDialog = (field?: any) => {
     if (field) {
+      // Обрабатываем оба формата данных
+      const fieldData = field.attributes || field;
       setEditingField(field);
       setFormData({
-        name: field.attributes.name,
-        fieldType: field.attributes.fieldType,
-        isRequired: field.attributes.isRequired,
-        options: field.attributes.options || [],
-        order: field.attributes.order,
+        name: fieldData.name || '',
+        fieldType: fieldData.fieldType || 'TEXT',
+        isRequired: fieldData.isRequired || false,
+        options: fieldData.options || [],
+        order: fieldData.order || 0,
       });
     } else {
       setEditingField(null);
@@ -129,6 +139,26 @@ const FieldManagement: React.FC = () => {
     });
   };
 
+  // Обработка состояния загрузки
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Обработка ошибки
+  if (error) {
+    return (
+      <Box p={4}>
+        <Alert severity="error">
+          Ошибка загрузки полей. Попробуйте обновить страницу.
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
@@ -154,35 +184,62 @@ const FieldManagement: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {fields.map((field: any) => (
-              <TableRow key={field.id}>
-                <TableCell>
-                  <DragIcon color="disabled" />
-                </TableCell>
-                <TableCell>{field.attributes.name}</TableCell>
-                <TableCell>{field.attributes.fieldType}</TableCell>
-                <TableCell>
-                  {field.attributes.isRequired ? 'Да' : 'Нет'}
-                </TableCell>
-                <TableCell>
-                  {field.attributes.fieldType === 'SELECT' &&
-                    field.attributes.options?.map((opt: string) => (
-                      <Chip key={opt} label={opt} size="small" sx={{ mr: 0.5 }} />
-                    ))}
-                </TableCell>
-                <TableCell align="right">
-                  <IconButton onClick={() => handleOpenDialog(field)}>
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => deleteMutation.mutate(field.id)}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+            {fields.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  Нет созданных полей
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              fields.map((field: any) => {
+                // Безопасное извлечение данных с поддержкой обоих форматов
+                const fieldData = field.attributes || field;
+                const fieldId = field.id;
+                
+                if (!fieldData || !fieldId) {
+                  console.warn('Invalid field data:', field);
+                  return null;
+                }
+
+                return (
+                  <TableRow key={fieldId}>
+                    <TableCell>
+                      <DragIcon color="disabled" />
+                    </TableCell>
+                    <TableCell>{fieldData.name || 'Без названия'}</TableCell>
+                    <TableCell>{fieldData.fieldType || 'TEXT'}</TableCell>
+                    <TableCell>
+                      {fieldData.isRequired ? 'Да' : 'Нет'}
+                    </TableCell>
+                    <TableCell>
+                      {fieldData.fieldType === 'SELECT' && fieldData.options && (
+                        <>
+                          {fieldData.options.map((opt: string, idx: number) => (
+                            <Chip 
+                              key={`${fieldId}-opt-${idx}`} 
+                              label={opt} 
+                              size="small" 
+                              sx={{ mr: 0.5, mb: 0.5 }} 
+                            />
+                          ))}
+                        </>
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton onClick={() => handleOpenDialog(field)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => deleteMutation.mutate(fieldId)}
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -198,6 +255,9 @@ const FieldManagement: React.FC = () => {
               label="Название поля"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+              error={saveMutation.isError && !formData.name}
+              helperText={saveMutation.isError && !formData.name ? 'Название обязательно' : ''}
             />
 
             <FormControl fullWidth>
@@ -242,14 +302,16 @@ const FieldManagement: React.FC = () => {
                   }}
                   InputProps={{
                     endAdornment: (
-                      <Button onClick={handleAddOption}>Добавить</Button>
+                      <Button onClick={handleAddOption} disabled={!newOption.trim()}>
+                        Добавить
+                      </Button>
                     ),
                   }}
                 />
                 <Box sx={{ mt: 1 }}>
                   {formData.options.map((option, index) => (
                     <Chip
-                      key={index}
+                      key={`option-${index}`}
                       label={option}
                       onDelete={() => handleRemoveOption(index)}
                       sx={{ mr: 1, mb: 1 }}
@@ -262,8 +324,12 @@ const FieldManagement: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Отмена</Button>
-          <Button onClick={handleSave} variant="contained">
-            Сохранить
+          <Button 
+            onClick={handleSave} 
+            variant="contained"
+            disabled={saveMutation.isPending || !formData.name.trim()}
+          >
+            {saveMutation.isPending ? 'Сохранение...' : 'Сохранить'}
           </Button>
         </DialogActions>
       </Dialog>
