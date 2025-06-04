@@ -32,7 +32,7 @@ const ExportData: React.FC = () => {
     queryKey: ['customFields'],
     queryFn: async () => {
       const { data } = await api.get('/api/custom-fields');
-      return data.data;
+      return data.data || [];
     },
   });
 
@@ -136,18 +136,25 @@ const ExportData: React.FC = () => {
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }} gutterBottom>
                     Кастомные поля:
                   </Typography>
-                  {customFields.map((field: any) => (
-                    <FormControlLabel
-                      key={field.id}
-                      control={
-                        <Checkbox
-                          checked={selectedFields.includes(field.id)}
-                          onChange={() => handleFieldToggle(field.id)}
-                        />
-                      }
-                      label={field.attributes.name}
-                    />
-                  ))}
+                  {customFields.map((field: any) => {
+                    // Безопасное извлечение данных поля
+                    const fieldData = field.attributes || field;
+                    const fieldId = field.id?.toString() || '';
+                    const fieldName = fieldData?.name || 'Без названия';
+                    
+                    return (
+                      <FormControlLabel
+                        key={fieldId}
+                        control={
+                          <Checkbox
+                            checked={selectedFields.includes(fieldId)}
+                            onChange={() => handleFieldToggle(fieldId)}
+                          />
+                        }
+                        label={fieldName}
+                      />
+                    );
+                  })}
                 </Box>
               )}
             </FormGroup>

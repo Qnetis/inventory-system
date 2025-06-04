@@ -14,6 +14,7 @@ import {
   TableHead,
   TableRow,
   CircularProgress,
+  Alert,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
@@ -21,12 +22,13 @@ import { api } from '../../services/api';
 const Statistics: React.FC = () => {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
-  const { data: stats = [], isLoading } = useQuery({
+  const { data: stats = [], isLoading, error } = useQuery({
     queryKey: ['statistics', period],
     queryFn: async () => {
       const { data } = await api.get(`/api/records/statistics?period=${period}`);
       return data;
     },
+    retry: 1,
   });
 
   const periodLabels = {
@@ -34,6 +36,16 @@ const Statistics: React.FC = () => {
     weekly: 'За неделю',
     monthly: 'За месяц',
   };
+
+  if (error) {
+    return (
+      <Box p={3}>
+        <Alert severity="error">
+          Ошибка загрузки статистики. Убедитесь, что у вас есть права администратора.
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box>
