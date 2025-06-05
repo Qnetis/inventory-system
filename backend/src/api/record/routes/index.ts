@@ -1,7 +1,12 @@
+/**
+ * Индексный файл для роутов
+ * Файл: backend/src/api/record/routes/index.ts
+ */
+
 import recordRoutes from './record';
-//import customRoutes from './custom-routes';
+import statisticsRoutes from './statistics';
 
 export default {
   record: recordRoutes,
- // 'custom-routes': customRoutes,
+  statistics: statisticsRoutes,
 };

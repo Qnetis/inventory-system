@@ -1,14 +1,30 @@
+/**
+ * record router - альтернативный подход
+ */
+
 import { factories } from '@strapi/strapi';
-import customRoutes from './custom-routes';
 
-const defaultRouter = factories.createCoreRouter('api::record.record');
-
-const defaultRoutes =
-  typeof defaultRouter.routes === 'function' ? defaultRouter.routes() : defaultRouter.routes;
-
-export default {
-  routes: [
-    ...defaultRoutes,
-    ...customRoutes.routes,
-  ],
-};
+export default factories.createCoreRouter('api::record.record', {
+  config: {
+    find: {
+      policies: [],
+      middlewares: [],
+    },
+    findOne: {
+      policies: [],
+      middlewares: [],
+    },
+    create: {
+      policies: [],
+      middlewares: [],
+    },
+    update: {
+      policies: [],
+      middlewares: [],
+    },
+    delete: {
+      policies: [],
+      middlewares: [],
+    },
+  },
+});
