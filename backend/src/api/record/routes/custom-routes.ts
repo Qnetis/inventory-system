@@ -2,24 +2,22 @@ export default {
   routes: [
     {
       method: 'GET',
-      path: '/api/records/statistics',
-      handler: 'api::record.record.statistics',
+      path: '/records/statistics',
+      handler: 'record.statistics',
       config: {
-        auth: {
-          scope: ['authenticated']
-        },
+        // Убираем auth чтобы не требовать авторизацию
+        // Или оставляем только базовую проверку authenticated без проверки роли
         policies: [],
         middlewares: [],
       },
     },
     {
       method: 'POST',
-      path: '/api/records/export',
-      handler: 'api::record.record.export',
+      path: '/records/export',
+      handler: 'record.export',
       config: {
-        auth: {
-          scope: ['authenticated']
-        },
+        // Убираем auth чтобы не требовать авторизацию
+        // Или оставляем только базовую проверку authenticated без проверки роли
         policies: [],
         middlewares: [],
       },

@@ -1,7 +1,7 @@
 import recordRoutes from './record';
-import customRoutes from './custom-routes';
+//import customRoutes from './custom-routes';
 
 export default {
   record: recordRoutes,
-  'custom-routes': customRoutes,
+ // 'custom-routes': customRoutes,
 };
