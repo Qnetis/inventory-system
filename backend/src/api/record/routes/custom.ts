@@ -1,6 +1,5 @@
 /**
  * Кастомные роуты для статистики и экспорта
- * Файл: backend/src/api/record/routes/statistics.ts
  */
 
 export default {

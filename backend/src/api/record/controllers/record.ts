@@ -183,103 +183,100 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   // Дополнительные методы
   
   async statistics(ctx) {
-  try {
-    // Проверка прав админа
-    console.log("!!!!");
-    const { period = 'daily' } = ctx.query;
+    try {
+      console.log("Statistics endpoint called");
+      const { period = 'daily' } = ctx.query;
 
-    // Определяем начальную дату
-    const now = new Date();
-    let startDate;
-    
-    switch (period) {
-      case 'daily':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        break;
-      case 'weekly':
-        const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        startDate = new Date(now.getFullYear(), now.getMonth(), diff);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    }
-    
-    // Получаем записи за период с правильными фильтрами для Strapi v5
-    const records = await strapi.entityService.findMany('api::record.record', {
-      filters: {
-        createdAt: { 
-          $gte: startDate.toISOString() 
+      // Определяем начальную дату
+      const now = new Date();
+      let startDate;
+      
+      switch (period) {
+        case 'daily':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'weekly':
+          const day = now.getDay();
+          const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+          startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'monthly':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+      
+      // Получаем записи за период с правильными фильтрами для Strapi v5
+      const records = await strapi.entityService.findMany('api::record.record', {
+        filters: {
+          createdAt: { 
+            $gte: startDate.toISOString() 
+          },
+          publishedAt: {
+            $notNull: true
+          }
         },
-        publishedAt: {
-          $notNull: true
+        populate: ['owner'],
+        limit: -1 // Получаем все записи
+      });
+      
+      // Получаем денежные поля
+      const moneyFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
+        filters: { 
+          fieldType: 'MONEY',
+          publishedAt: {
+            $notNull: true
+          }
         }
-      },
-      populate: ['owner'],
-      limit: -1 // Получаем все записи
-    });
-    
-    // Получаем денежные поля
-    const moneyFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
-      filters: { 
-        fieldType: 'MONEY',
-        publishedAt: {
-          $notNull: true
+      });
+      
+      // Группируем по пользователям
+      const userStats = {};
+      
+      for (const record of records) {
+        const userId = record.owner?.id;
+        const userName = record.owner?.fullName || record.owner?.username || 'Unknown';
+        
+        if (!userId) continue;
+        
+        if (!userStats[userId]) {
+          userStats[userId] = {
+            user: userName,
+            count: 0,
+            totalMoney: 0
+          };
         }
-      }
-    });
-    
-    // Группируем по пользователям
-    const userStats = {};
-    
-    for (const record of records) {
-      const userId = record.owner?.id;
-      const userName = record.owner?.fullName || record.owner?.username || 'Unknown';
-      
-      if (!userId) continue;
-      
-      if (!userStats[userId]) {
-        userStats[userId] = {
-          user: userName,
-          count: 0,
-          totalMoney: 0
-        };
-      }
-      
-      userStats[userId].count++;
-      
-      // Считаем деньги
-      if (record.dynamicData && moneyFields.length > 0) {
-        for (const field of moneyFields) {
-          const value = record.dynamicData[field.id];
-          if (value && !isNaN(value)) {
-            userStats[userId].totalMoney += Number(value);
+        
+        userStats[userId].count++;
+        
+        // Считаем деньги
+        if (record.dynamicData && moneyFields.length > 0) {
+          for (const field of moneyFields) {
+            const value = record.dynamicData[field.id];
+            if (value && !isNaN(value)) {
+              userStats[userId].totalMoney += Number(value);
+            }
           }
         }
       }
-    }
-    
-    // Возвращаем массив статистики
+      
+      // Возвращаем массив статистики
+     // Возвращаем массив статистики
 const stats: UserStatistic[] = Object.values(userStats);
 stats.sort((a, b) => b.count - a.count);
-    // Возвращаем ответ в правильном формате
-    ctx.body = stats;
-    
-  } catch (error) {
-    console.error('Statistics error:', error);
-    ctx.throw(500, error.message || 'Error generating statistics');
-  }
-},
+      // Возвращаем ответ в правильном формате
+      ctx.body = stats;
+      
+    } catch (error) {
+      console.error('Statistics error:', error);
+      ctx.throw(500, error.message || 'Error generating statistics');
+    }
+  },
   
   async export(ctx) {
     try {
-      // Проверка прав админа
-
-      
       const { format = 'csv', fields = [] } = ctx.request.body;
       
       // Получаем все записи
