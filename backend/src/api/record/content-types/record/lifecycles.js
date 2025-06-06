@@ -1,8 +1,11 @@
+// backend/src/api/record/content-types/record/lifecycles.js
 const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
   async beforeCreate(event) {
     const { data } = event.params;
+    
+    console.log('Record lifecycle beforeCreate called with data:', data);
     
     // Если нет инвентарного номера, генерируем
     if (!data.inventoryNumber) {
@@ -31,6 +34,8 @@ module.exports = {
   async beforeUpdate(event) {
     const { data } = event.params;
     
+    console.log('Record lifecycle beforeUpdate called with data:', data);
+    
     // Валидация кастомных полей при обновлении
     if (data.dynamicData) {
       await validateCustomFields(data.dynamicData);
@@ -55,23 +60,29 @@ function generateEAN13() {
 async function validateCustomFields(dynamicData) {
   if (!dynamicData) return;
   
-  const customFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
-    filters: { 
-      publishedAt: { $notNull: true },
-      isRequired: true 
+  try {
+    // Используем Document Service для получения кастомных полей в Strapi v5
+    const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
+      filters: { 
+        isRequired: true 
+      },
+      status: 'published'
+    });
+    
+    const errors = [];
+    
+    for (const field of customFields) {
+      const value = dynamicData[field.id];
+      if (field.isRequired && (value === undefined || value === null || value === '')) {
+        errors.push(`Поле "${field.name}" обязательно для заполнения`);
+      }
     }
-  });
-  
-  const errors = [];
-  
-  for (const field of customFields) {
-    const value = dynamicData[field.id];
-    if (field.isRequired && (value === undefined || value === null || value === '')) {
-      errors.push(`Поле "${field.name}" обязательно для заполнения`);
+    
+    if (errors.length > 0) {
+      throw new Error(errors.join(', '));
     }
-  }
-  
-  if (errors.length > 0) {
-    throw new Error(errors.join(', '));
+  } catch (error) {
+    console.error('Validation error:', error);
+    throw error;
   }
 }

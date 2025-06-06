@@ -114,7 +114,10 @@ const RecordsPage: React.FC = () => {
   };
 
   const handleRowClick = (record: any) => {
-    navigate(`/records/${record.id}`);
+    // ИСПРАВЛЕНИЕ: Используем documentId вместо id
+    const recordId = record.documentId || record.id;
+    console.log('Navigating to record:', recordId, 'Full record:', record);
+    navigate(`/records/${recordId}`);
   };
 
   return (

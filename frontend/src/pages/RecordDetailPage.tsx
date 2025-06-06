@@ -37,7 +37,7 @@ import { useAuth } from '../contexts/AuthContext';
 import DynamicForm from '../components/Records/DynamicForm';
 
 const RecordDetailPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>(); // id здесь может быть documentId
   const navigate = useNavigate();
   const { user } = useAuth();
   const theme = useTheme();
@@ -46,12 +46,36 @@ const RecordDetailPage: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
-  // Получение записи
+  // ИСПРАВЛЕНИЕ: Используем documentId для запроса записи
   const { data: recordData, isLoading, refetch } = useQuery({
     queryKey: ['record', id],
     queryFn: async () => {
-      const { data } = await api.get(`/api/records/${id}?populate=owner`);
-      return data.data;
+      console.log('Fetching record with id/documentId:', id);
+      
+      // Пробуем сначала по documentId
+      try {
+        const { data } = await api.get(`/api/records/${id}?populate=owner`);
+        console.log('Record found by documentId:', data);
+        return data.data;
+      } catch (error: any) {
+        console.error('Error fetching by documentId:', error);
+        
+        // Если 404, пробуем найти по id через фильтр
+        if (error.response?.status === 404) {
+          console.log('Trying to find record by id filter...');
+          try {
+            const { data } = await api.get(`/api/records?filters[id][$eq]=${id}&populate=owner`);
+            if (data.data && data.data.length > 0) {
+              console.log('Record found by id filter:', data.data[0]);
+              return data.data[0];
+            }
+          } catch (filterError) {
+            console.error('Error with filter search:', filterError);
+          }
+        }
+        
+        throw error;
+      }
     },
     enabled: !!id,
   });
@@ -68,6 +92,7 @@ const RecordDetailPage: React.FC = () => {
   // Генерация штрихкода
   useEffect(() => {
     if (canvasRef.current && recordData) {
+      // Поддержка обоих форматов данных
       const record = recordData.attributes || recordData;
       if (record.barcode) {
         JsBarcode(canvasRef.current, record.barcode, {
@@ -83,7 +108,11 @@ const RecordDetailPage: React.FC = () => {
 
   const handleEdit = async (formData: any) => {
     try {
-      await api.put(`/api/records/${id}`, { data: formData });
+      // ИСПРАВЛЕНИЕ: Используем правильный ID для обновления
+      const recordId = recordData?.documentId || recordData?.id || id;
+      console.log('Updating record with ID:', recordId);
+      
+      await api.put(`/api/records/${recordId}`, { data: formData });
       setIsEditDialogOpen(false);
       refetch();
     } catch (error) {
@@ -186,6 +215,9 @@ const RecordDetailPage: React.FC = () => {
     return (
       <Box p={4}>
         <Typography>Запись не найдена</Typography>
+        <Button onClick={() => navigate('/records')} sx={{ mt: 2 }}>
+          Назад к записям
+        </Button>
       </Box>
     );
   }
