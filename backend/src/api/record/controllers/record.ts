@@ -182,99 +182,242 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   
   // Дополнительные методы
   
-  async statistics(ctx) {
-    try {
-      console.log("Statistics endpoint called");
-      const { period = 'daily' } = ctx.query;
+  // Замените метод statistics в backend/src/api/record/controllers/record.ts
 
-      // Определяем начальную дату
-      const now = new Date();
-      let startDate;
-      
-      switch (period) {
-        case 'daily':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
-        case 'weekly':
-          const day = now.getDay();
-          const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-          startDate = new Date(now.getFullYear(), now.getMonth(), diff);
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'monthly':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      }
-      
-      // Получаем записи за период с правильными фильтрами для Strapi v5
-      const records = await strapi.entityService.findMany('api::record.record', {
-        filters: {
-          createdAt: { 
-            $gte: startDate.toISOString() 
-          },
-          publishedAt: {
-            $notNull: true
-          }
+async statistics(ctx) {
+  try {
+    console.log("=== Statistics endpoint called ===");
+    const { period = 'daily' } = ctx.query;
+    console.log("Period:", period);
+
+    // Определяем начальную и конечную дату
+    const now = new Date();
+    let startDate, endDate;
+    
+    switch (period) {
+      case 'daily':
+        // С начала текущего дня
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        break;
+      case 'weekly':
+        // С начала недели (понедельник)
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), diff, 0, 0, 0, 0);
+        endDate = new Date(now);
+        break;
+      case 'monthly':
+        // С начала месяца
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        endDate = new Date(now);
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    }
+    
+    console.log("Date range:", startDate.toISOString(), "to", endDate.toISOString());
+    
+    // Получаем записи за период
+    const records = await strapi.entityService.findMany('api::record.record', {
+      filters: {
+        createdAt: { 
+          $gte: startDate.toISOString(),
+          $lte: endDate.toISOString()
         },
-        populate: ['owner'],
-        limit: -1 // Получаем все записи
-      });
-      
-      // Получаем денежные поля
-      const moneyFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
-        filters: { 
-          fieldType: 'MONEY',
-          publishedAt: {
-            $notNull: true
-          }
+        publishedAt: {
+          $notNull: true
         }
-      });
-      
-      // Группируем по пользователям
-      const userStats = {};
-      
+      },
+      populate: {
+        owner: {
+          fields: ['id', 'username', 'fullName', 'email']
+        }
+      },
+      pagination: {
+        limit: -1 // Получаем все записи
+      }
+    });
+    
+    console.log("Found records:", records?.length || 0);
+    
+    // Получаем денежные поля для подсчета сумм
+    const moneyFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
+      filters: { 
+        fieldType: 'MONEY',
+        publishedAt: {
+          $notNull: true
+        }
+      },
+      pagination: {
+        limit: -1
+      }
+    });
+    
+    console.log("Money fields found:", moneyFields?.length || 0);
+    
+    // Группируем записи по пользователям
+    const userStats = new Map();
+    
+    if (records && records.length > 0) {
       for (const record of records) {
-        const userId = record.owner?.id;
-        const userName = record.owner?.fullName || record.owner?.username || 'Unknown';
+        const owner = record.owner;
         
-        if (!userId) continue;
+        if (!owner || !owner.id) {
+          console.log("Record without owner:", record.id);
+          continue;
+        }
         
-        if (!userStats[userId]) {
-          userStats[userId] = {
+        const userId = owner.id.toString();
+        const userName = owner.fullName || owner.username || owner.email || `User ${userId}`;
+        
+        // Инициализируем статистику пользователя если её нет
+        if (!userStats.has(userId)) {
+          userStats.set(userId, {
             user: userName,
+            userId: userId,
             count: 0,
             totalMoney: 0
-          };
+          });
         }
         
-        userStats[userId].count++;
+        // Увеличиваем счетчик записей
+        const stats = userStats.get(userId);
+        stats.count++;
         
-        // Считаем деньги
+        // Считаем деньги из динамических полей
         if (record.dynamicData && moneyFields.length > 0) {
           for (const field of moneyFields) {
-            const value = record.dynamicData[field.id];
-            if (value && !isNaN(value)) {
-              userStats[userId].totalMoney += Number(value);
+            const fieldValue = record.dynamicData[field.id];
+            if (fieldValue !== null && fieldValue !== undefined && !isNaN(fieldValue)) {
+              const moneyValue = Number(fieldValue);
+              if (moneyValue > 0) {
+                stats.totalMoney += moneyValue;
+              }
             }
           }
         }
+        
+        userStats.set(userId, stats);
       }
-      
-      // Возвращаем массив статистики
-     // Возвращаем массив статистики
-const stats: UserStatistic[] = Object.values(userStats);
-stats.sort((a, b) => b.count - a.count);
-      // Возвращаем ответ в правильном формате
-      ctx.body = stats;
-      
-    } catch (error) {
-      console.error('Statistics error:', error);
-      ctx.throw(500, error.message || 'Error generating statistics');
     }
-  },
-  
+    
+    // Преобразуем Map в массив и сортируем
+    const statsArray = Array.from(userStats.values());
+    
+    // Сортируем по количеству записей (убывание)
+    statsArray.sort((a, b) => {
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+      // Если количество одинаковое, сортируем по сумме
+      return b.totalMoney - a.totalMoney;
+    });
+    
+    console.log("Final statistics:", statsArray);
+    
+    // Если нет данных, возвращаем пустой массив
+    if (statsArray.length === 0) {
+      console.log("No statistics data found for period:", period);
+    }
+    
+    // Возвращаем ответ
+    ctx.body = statsArray;
+    
+  } catch (error) {
+    console.error('Statistics error:', error);
+    console.error('Error stack:', error.stack);
+    ctx.throw(500, `Error generating statistics: ${error.message}`);
+  }
+},
+  // Добавьте этот метод в контроллер для отладки
+
+async debugStatistics(ctx) {
+  try {
+    console.log("=== DEBUG Statistics ===");
+    
+    // Проверяем все записи в системе
+    const allRecords = await strapi.entityService.findMany('api::record.record', {
+      populate: {
+        owner: {
+          fields: ['id', 'username', 'fullName', 'email']
+        }
+      },
+      pagination: {
+        limit: -1
+      }
+    });
+    
+    console.log("Total records in system:", allRecords?.length || 0);
+    
+    // Проверяем пользователей
+    const allUsers = await strapi.entityService.findMany('plugin::users-permissions.user', {
+      fields: ['id', 'username', 'fullName', 'email'],
+      pagination: {
+        limit: -1
+      }
+    });
+    
+    console.log("Total users in system:", allUsers?.length || 0);
+    
+    // Проверяем денежные поля
+    const moneyFields = await strapi.entityService.findMany('api::custom-field.custom-field', {
+      filters: { 
+        fieldType: 'MONEY'
+      },
+      pagination: {
+        limit: -1
+      }
+    });
+    
+    console.log("Money fields:", moneyFields?.length || 0);
+    
+    // Группируем записи по дням
+    const recordsByDate = {};
+    
+    if (allRecords) {
+      for (const record of allRecords) {
+        const date = new Date(record.createdAt).toISOString().split('T')[0];
+        if (!recordsByDate[date]) {
+          recordsByDate[date] = [];
+        }
+        recordsByDate[date].push({
+          id: record.id,
+          createdAt: record.createdAt,
+          owner: record.owner ? {
+            id: record.owner.id,
+            name: record.owner.fullName || record.owner.username
+          } : null
+        });
+      }
+    }
+    
+    const debugInfo = {
+      totalRecords: allRecords?.length || 0,
+      totalUsers: allUsers?.length || 0,
+      moneyFieldsCount: moneyFields?.length || 0,
+      recordsByDate,
+      users: allUsers?.map(u => ({
+        id: u.id,
+        username: u.username,
+        fullName: u.fullName,
+        email: u.email
+      })) || [],
+      moneyFields: moneyFields?.map(f => ({
+        id: f.id,
+        name: f.name,
+        fieldType: f.fieldType
+      })) || []
+    };
+    
+    ctx.body = debugInfo;
+    
+  } catch (error) {
+    console.error('Debug statistics error:', error);
+    ctx.throw(500, error.message);
+  }
+},
   async export(ctx) {
     try {
       const { format = 'csv', fields = [] } = ctx.request.body;
