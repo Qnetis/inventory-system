@@ -196,9 +196,7 @@ export const RecordsPage: React.FC = () => {
     setShowAllRecords(checked);
     setPage(0); // Сбрасываем на первую страницу
     
-    // Принудительно обновляем данные
-    queryClient.invalidateQueries({ queryKey: ['records'] });
-  };
+ };
 
   const formatFieldValue = (value: any, fieldType: string) => {
     if (!value) return '';
