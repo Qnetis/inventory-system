@@ -1,5 +1,7 @@
-// frontend/src/pages/Records/RecordsPage.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+// frontend/src/pages/RecordsPage.tsx
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -41,18 +43,16 @@ import {
   Person as PersonIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { AdvancedFilters, applyFiltersToData } from '../../components/Records/AdvancedFilters';
-import { recordsApi, fieldsApi } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
-import { ExportDialog } from '../../components/Records/ExportDialog';
-import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { AdvancedFilters, applyFiltersToData } from '../components/Records/AdvancedFilters';
+import { recordsApi, fieldsApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { ExportDialog } from '../components/Records/ExportDialog';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 
-interface RecordsPageProps {}
-
-export const RecordsPage: React.FC<RecordsPageProps> = () => {
+export const RecordsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -73,33 +73,27 @@ export const RecordsPage: React.FC<RecordsPageProps> = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   // Загрузка данных
-  const { data: recordsData, isLoading: recordsLoading, error: recordsError } = useQuery(
-    ['records', { showAll: showAllRecords }],
-    () => recordsApi.getAll({ showAll: showAllRecords }),
-    {
-      keepPreviousData: true,
-    }
-  );
+  const { data: recordsData, isLoading: recordsLoading, error: recordsError } = useQuery({
+    queryKey: ['records', { showAll: showAllRecords }],
+    queryFn: () => recordsApi.getAll({ showAll: showAllRecords }),
+    keepPreviousData: true,
+  });
 
-  const { data: fieldsData } = useQuery(
-    'fields',
-    () => fieldsApi.getAll(),
-    {
-      staleTime: 5 * 60 * 1000, // 5 минут
-    }
-  );
+  const { data: fieldsData } = useQuery({
+    queryKey: ['fields'],
+    queryFn: () => fieldsApi.getAll(),
+    staleTime: 5 * 60 * 1000, // 5 минут
+  });
 
   // Мутация для удаления записи
-  const deleteMutation = useMutation(
-    (id: string) => recordsApi.delete(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('records');
-        setDeleteDialogOpen(false);
-        setSelectedRecord(null);
-      },
-    }
-  );
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => recordsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      setDeleteDialogOpen(false);
+      setSelectedRecord(null);
+    },
+  });
 
   // Обработка данных
   const records = useMemo(() => {
@@ -164,7 +158,7 @@ export const RecordsPage: React.FC<RecordsPageProps> = () => {
     setOrderBy(property);
   };
 
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
@@ -435,7 +429,6 @@ export const RecordsPage: React.FC<RecordsPageProps> = () => {
                 ) : (
                   paginatedRecords.map((record: any) => {
                     const canEdit = record.attributes.canEdit || isAdmin;
-                    const isOwner = record.attributes.isOwner;
                     
                     return (
                       <TableRow
