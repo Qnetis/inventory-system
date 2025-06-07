@@ -1,4 +1,4 @@
-// src/api/record/controllers/record.ts
+// backend/src/api/record/controllers/record.ts
 'use strict';
 
 const { createCoreController } = require('@strapi/strapi').factories;
@@ -60,24 +60,37 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   async find(ctx) {
     try {
       const user = ctx.state.user;
+      const { showAll } = ctx.query;
+      
+      console.log('Find records - User:', user.username, 'showAll:', showAll);
       
       // Для обычных пользователей добавляем фильтр по владельцу
-      if (user.role?.type !== 'admin') {
-        if (!ctx.query.filters) {
-          ctx.query.filters = {};
-        }
-        ctx.query.filters.owner = user.id;
+      let filters: any = {};
+      
+      // Если пользователь НЕ администратор И НЕ запрашивает все записи
+      if (user.role?.type !== 'admin' && !showAll) {
+        filters.owner = user.id;
       }
       
-      // Устанавливаем populate если не задан
-      if (!ctx.query.populate) {
-        ctx.query.populate = ['owner'];
-      }
+      // Получаем записи с использованием Document Service
+      const records = await strapi.documents('api::record.record').findMany({
+        filters,
+        populate: ['owner'],
+        status: 'published'
+      });
       
-      // Вызываем родительский метод find
-      const response = await super.find(ctx);
+      // Добавляем информацию о правах редактирования
+      const recordsWithPermissions = records.map(record => ({
+        ...record,
+        canEdit: record.owner?.id === user.id || user.role?.type === 'admin',
+        isOwner: record.owner?.id === user.id,
+      }));
       
-      return response;
+      return {
+        data: recordsWithPermissions,
+        meta: {}
+      };
+      
     } catch (error) {
       console.error('Find error:', error);
       ctx.throw(500, error.message);
@@ -126,7 +139,11 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       }
       
       return {
-        data: record,
+        data: {
+          ...record,
+          canEdit: ownerId === user.id || user.role?.type === 'admin',
+          isOwner: ownerId === user.id,
+        },
         meta: {}
       };
     } catch (error) {
@@ -184,7 +201,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       const errors = [];
       for (const field of customFields) {
         if (field.isRequired && !data.dynamicData?.[field.id]) {
-          errors.push(`Поле "${field.name}" обязательно для заполнения`);
+          errors.push(`Field "${field.name}" is required`);
         }
       }
       
@@ -197,15 +214,23 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
         documentId: existingRecord.documentId,
         data: {
           name: data.name || existingRecord.name,
-          dynamicData: data.dynamicData || existingRecord.dynamicData
+          dynamicData: data.dynamicData || existingRecord.dynamicData,
         },
-        populate: ['owner']
+        status: 'published'
+      });
+      
+      // Получаем обновленную запись с populate
+      const populatedRecord = await strapi.documents('api::record.record').findOne({
+        documentId: updatedRecord.documentId,
+        populate: ['owner'],
+        status: 'published'
       });
       
       return {
-        data: updatedRecord,
+        data: populatedRecord,
         meta: {}
       };
+      
     } catch (error) {
       console.error('Update error:', error);
       ctx.throw(500, error.message);
@@ -217,16 +242,17 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       const { id: documentId } = ctx.params;
       const user = ctx.state.user;
       
+      console.log('Delete called with documentId:', documentId);
+      
       // Получаем запись для проверки прав
-      let record;
+      let existingRecord;
       try {
-        record = await strapi.documents('api::record.record').findOne({
+        existingRecord = await strapi.documents('api::record.record').findOne({
           documentId: documentId,
           populate: ['owner'],
           status: 'published'
         });
       } catch (error) {
-        // Пробуем найти по id если не найдено по documentId
         const records = await strapi.documents('api::record.record').findMany({
           filters: { id: documentId },
           populate: ['owner'],
@@ -234,15 +260,15 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
         });
         
         if (records.length > 0) {
-          record = records[0];
+          existingRecord = records[0];
         }
       }
       
-      if (!record) {
+      if (!existingRecord) {
         return ctx.notFound('Record not found');
       }
       
-      const ownerId = record.owner?.id;
+      const ownerId = existingRecord.owner?.id;
       
       // Проверяем права на удаление
       if (user.role?.type !== 'admin' && ownerId !== user.id) {
@@ -250,38 +276,133 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       }
       
       // Удаляем запись
-      const deletedRecord = await strapi.documents('api::record.record').delete({
-        documentId: record.documentId
+      await strapi.documents('api::record.record').delete({
+        documentId: existingRecord.documentId,
       });
       
-      return {
-        data: deletedRecord,
-        meta: {}
-      };
+      return { data: null, meta: {} };
+      
     } catch (error) {
       console.error('Delete error:', error);
       ctx.throw(500, error.message);
     }
   },
-  
-  // Дополнительные методы
-  
-  async statistics(ctx) {
-    try {
-      console.log("Statistics endpoint called");
-      const { period = 'daily' } = ctx.query;
 
-      // Определяем начальную дату
+  // Генерация EAN-13 штрихкода
+  generateEAN13() {
+    // Генерируем 12 случайных цифр
+    let code = '';
+    for (let i = 0; i < 12; i++) {
+      code += Math.floor(Math.random() * 10);
+    }
+    
+    // Вычисляем контрольную сумму
+    let oddSum = 0;
+    let evenSum = 0;
+    
+    for (let i = 0; i < 12; i++) {
+      if (i % 2 === 0) {
+        oddSum += parseInt(code[i]);
+      } else {
+        evenSum += parseInt(code[i]);
+      }
+    }
+    
+    const checksum = (10 - ((oddSum + evenSum * 3) % 10)) % 10;
+    
+    return code + checksum;
+  },
+
+  // Статистика для текущего пользователя
+  async getUserStatistics(ctx) {
+    try {
+      const user = ctx.state.user;
+      const { period = 'daily' } = ctx.query;
+      
       const now = new Date();
       let startDate;
       
       switch (period) {
-        case 'daily':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
         case 'weekly':
-          const day = now.getDay();
-          const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+          const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
+          startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'monthly':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+      
+      // Получаем записи за период с использованием Document Service
+      const records = await strapi.documents('api::record.record').findMany({
+        filters: {
+          owner: user.id,
+          createdAt: { 
+            $gte: startDate.toISOString() 
+          }
+        },
+        populate: ['owner'],
+        status: 'published'
+      });
+      
+      // Получаем денежные поля
+      const moneyFields = await strapi.documents('api::custom-field.custom-field').findMany({
+        filters: { 
+          fieldType: 'MONEY'
+        },
+        status: 'published'
+      });
+      
+      let totalMoney = 0;
+      
+      // Считаем общую сумму по денежным полям
+      for (const record of records) {
+        if (record.dynamicData && moneyFields.length > 0) {
+          for (const field of moneyFields) {
+            const value = record.dynamicData[field.id];
+            if (value && !isNaN(value)) {
+              totalMoney += Number(value);
+            }
+          }
+        }
+      }
+      
+      ctx.body = {
+        user: user.fullName || user.username,
+        count: records.length,
+        totalMoney: totalMoney
+      };
+      
+    } catch (error) {
+      console.error('User statistics error:', error);
+      ctx.throw(500, error.message || 'Error generating user statistics');
+    }
+  },
+
+  // Общий метод статистики (алиас для getAllUsersStatistics)
+  async statistics(ctx) {
+    return this.getAllUsersStatistics(ctx);
+  },
+
+  // Статистика для всех пользователей (только админы)
+  async getAllUsersStatistics(ctx) {
+    try {
+      const user = ctx.state.user;
+      
+      if (user.role?.type !== 'admin') {
+        return ctx.forbidden('Only administrators can access this endpoint');
+      }
+      
+      const { period = 'daily' } = ctx.query;
+      
+      const now = new Date();
+      let startDate;
+      
+      switch (period) {
+        case 'weekly':
+          const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
           startDate = new Date(now.getFullYear(), now.getMonth(), diff);
           startDate.setHours(0, 0, 0, 0);
           break;
@@ -355,159 +476,96 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
   
   async export(ctx) {
     try {
+      const user = ctx.state.user;
       const { format = 'csv', fields = [] } = ctx.request.body;
+      const { showAll } = ctx.query;
+      
+      // Определяем фильтры на основе прав пользователя
+      let filters: any = {};
+      
+      // Если пользователь НЕ администратор И НЕ запрашивает все записи
+      if (user.role?.type !== 'admin' && !showAll) {
+        filters.owner = user.id;
+      }
       
       // Получаем все записи с использованием Document Service
       const records = await strapi.documents('api::record.record').findMany({
+        filters,
         populate: ['owner'],
         status: 'published'
       });
       
+      // Получаем кастомные поля
       const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
         sort: { order: 'asc' },
         status: 'published'
       });
       
-      if (format === 'csv') {
-        const csv = await this.generateCSV(records, customFields, fields);
-        ctx.set('Content-Type', 'text/csv; charset=utf-8');
-        ctx.set('Content-Disposition', 'attachment; filename="export.csv"');
-        ctx.body = '\ufeff' + csv; // BOM для корректного отображения в Excel
-      } else {
-        const excel = await this.generateExcel(records, customFields, fields);
-        ctx.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        ctx.set('Content-Disposition', 'attachment; filename="export.xlsx"');
-        ctx.body = excel;
-      }
+      // Генерируем CSV
+      const headers = ['Инвентарный номер', 'Штрихкод', 'Название', 'Дата создания', 'Владелец'];
       
-    } catch (error) {
-      ctx.throw(500, error);
-    }
-  },
-  
-  // Вспомогательные методы
-  
-  generateEAN13() {
-    const code = Array.from({ length: 12 }, () => 
-      Math.floor(Math.random() * 10)
-    ).join('');
-    
-    let sum = 0;
-    for (let i = 0; i < 12; i++) {
-      sum += parseInt(code[i]) * (i % 2 === 0 ? 1 : 3);
-    }
-    const checkDigit = (10 - (sum % 10)) % 10;
-    
-    return code + checkDigit;
-  },
-  
-  async generateCSV(records, customFields, selectedFields) {
-    const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-    const fs = require('fs').promises;
-    const path = require('path');
-    const os = require('os');
-    
-    const tempFile = path.join(os.tmpdir(), `export-${Date.now()}.csv`);
-    
-    // Заголовки
-    const headers = [
-      { id: 'inventoryNumber', title: 'Инв. номер' },
-      { id: 'barcode', title: 'Штрихкод' },
-      { id: 'owner', title: 'Владелец' },
-      { id: 'createdAt', title: 'Дата создания' }
-    ];
-    
-    // Добавляем кастомные поля
-    for (const field of customFields) {
-      if (!selectedFields.length || selectedFields.includes(field.id.toString())) {
-        headers.push({
-          id: `field_${field.id}`,
-          title: field.name
+      // Добавляем кастомные поля в заголовки
+      if (fields.length === 0) {
+        // Если поля не выбраны, экспортируем все
+        customFields.forEach(field => {
+          headers.push(field.name);
+        });
+      } else {
+        // Экспортируем только выбранные поля
+        fields.forEach(fieldId => {
+          const field = customFields.find(f => f.id === fieldId);
+          if (field) {
+            headers.push(field.name);
+          }
         });
       }
+      
+      let csvContent = headers.join(',') + '\n';
+      
+      // Добавляем данные
+      records.forEach(record => {
+        const row = [
+          `"${record.inventoryNumber || ''}"`,
+          `"${record.barcode || ''}"`,
+          `"${record.name || ''}"`,
+          `"${new Date(record.createdAt).toLocaleDateString('ru-RU')}"`,
+          `"${record.owner?.fullName || record.owner?.username || ''}"`
+        ];
+        
+        // Добавляем значения кастомных полей
+        const fieldsToExport = fields.length === 0 ? customFields : 
+          fields.map(fieldId => customFields.find(f => f.id === fieldId)).filter(Boolean);
+        
+        fieldsToExport.forEach(field => {
+          const value = record.dynamicData?.[field.id] || '';
+          
+          // Форматирование значений
+          let formattedValue = '';
+          if (field.fieldType === 'MONEY' && value) {
+            formattedValue = new Intl.NumberFormat('ru-RU').format(parseFloat(value));
+          } else if (field.fieldType === 'CHECKBOX') {
+            formattedValue = value ? 'Да' : 'Нет';
+          } else {
+            formattedValue = String(value);
+          }
+          
+          row.push(`"${formattedValue}"`);
+        });
+        
+        csvContent += row.join(',') + '\n';
+      });
+      
+      // Устанавливаем заголовки для скачивания файла
+      const fileName = `export_${new Date().toISOString().split('T')[0]}.${format}`;
+      
+      ctx.set('Content-Type', 'text/csv; charset=utf-8');
+      ctx.set('Content-Disposition', `attachment; filename="${fileName}"`);
+      
+      ctx.body = csvContent;
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      ctx.throw(500, 'Export failed');
     }
-    
-    const csvWriter = createCsvWriter({
-      path: tempFile,
-      header: headers
-    });
-    
-    // Данные
-    const data = records.map(record => {
-      const row = {
-        inventoryNumber: record.inventoryNumber,
-        barcode: record.barcode,
-        owner: record.owner?.fullName || record.owner?.username || '',
-        createdAt: new Date(record.createdAt).toLocaleString('ru-RU')
-      };
-      
-      for (const field of customFields) {
-        if (!selectedFields.length || selectedFields.includes(field.id.toString())) {
-          row[`field_${field.id}`] = record.dynamicData?.[field.id] || '';
-        }
-      }
-      
-      return row;
-    });
-    
-    await csvWriter.writeRecords(data);
-    const csvContent = await fs.readFile(tempFile, 'utf-8');
-    await fs.unlink(tempFile);
-    
-    return csvContent;
-  },
-  
-  async generateExcel(records, customFields, selectedFields) {
-    const ExcelJS = require('exceljs');
-    
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Записи');
-    
-    // Заголовки
-    const headers = ['Инв. номер', 'Штрихкод', 'Владелец', 'Дата создания'];
-    
-    for (const field of customFields) {
-      if (!selectedFields.length || selectedFields.includes(field.id.toString())) {
-        headers.push(field.name);
-      }
-    }
-    
-    worksheet.addRow(headers);
-    
-    // Стиль заголовков
-    worksheet.getRow(1).font = { bold: true };
-    worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' }
-    };
-    
-    // Данные
-    for (const record of records) {
-      const row = [
-        record.inventoryNumber,
-        record.barcode,
-        record.owner?.fullName || record.owner?.username || '',
-        new Date(record.createdAt).toLocaleString('ru-RU')
-      ];
-      
-      for (const field of customFields) {
-        if (!selectedFields.length || selectedFields.includes(field.id.toString())) {
-          row.push(record.dynamicData?.[field.id] || '');
-        }
-      }
-      
-      worksheet.addRow(row);
-    }
-    
-    // Автоширина колонок
-    worksheet.columns.forEach(column => {
-      column.width = 20;
-    });
-    
-    // Генерация буфера
-    const buffer = await workbook.xlsx.writeBuffer();
-    return buffer;
   }
-  
 }));

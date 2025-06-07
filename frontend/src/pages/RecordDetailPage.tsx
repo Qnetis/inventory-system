@@ -1,441 +1,543 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+// frontend/src/pages/RecordsPage.tsx
+import React, { useState, useMemo } from 'react';
 import {
   Box,
-  Paper,
-  Typography,
   Button,
-  Grid, // Новый Grid из MUI v7
   Card,
   CardContent,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
+  Typography,
+  TextField,
+  InputAdornment,
   IconButton,
-  Stack,
-  Divider,
-  useTheme,
-  useMediaQuery,
-  Fab,
+  Chip,
+  FormControlLabel,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TableSortLabel,
+  Skeleton,
+  Alert,
+  Menu,
+  MenuItem,
+  Tooltip,
+  Badge,
 } from '@mui/material';
 import {
-  ArrowBack as ArrowBackIcon,
+  Add as AddIcon,
+  Search as SearchIcon,
+  Clear as ClearIcon,
+  FilterList as FilterIcon,
+  Download as DownloadIcon,
+  MoreVert as MoreVertIcon,
   Edit as EditIcon,
-  Print as PrintIcon,
-  Bluetooth as BluetoothIcon,
-  Close as CloseIcon,
+  Delete as DeleteIcon,
+  Lock as LockIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
-import JsBarcode from 'jsbarcode';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { api } from '../services/api';
+import { AdvancedFilters, applyFiltersToData } from '../components/Records/AdvancedFilters';
+import { recordsApi, fieldsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import DynamicForm from '../components/Records/DynamicForm';
+import { ExportDialog } from '../components/Records/ExportDialog';
+import { ConfirmDialog } from '../components/Common/ConfirmDialog';
 
-const RecordDetailPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>(); // id здесь может быть documentId
+export const RecordsPage: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false);
+  const isAdmin = user?.role?.type === 'admin';
 
-  // ИСПРАВЛЕНИЕ: Используем documentId для запроса записи
-  const { data: recordData, isLoading, refetch } = useQuery({
-    queryKey: ['record', id],
-    queryFn: async () => {
-      console.log('Fetching record with id/documentId:', id);
-      
-      // Пробуем сначала по documentId
-      try {
-        const { data } = await api.get(`/api/records/${id}?populate=owner`);
-        console.log('Record found by documentId:', data);
-        return data.data;
-      } catch (error: any) {
-        console.error('Error fetching by documentId:', error);
-        
-        // Если 404, пробуем найти по id через фильтр
-        if (error.response?.status === 404) {
-          console.log('Trying to find record by id filter...');
-          try {
-            const { data } = await api.get(`/api/records?filters[id][$eq]=${id}&populate=owner`);
-            if (data.data && data.data.length > 0) {
-              console.log('Record found by id filter:', data.data[0]);
-              return data.data[0];
-            }
-          } catch (filterError) {
-            console.error('Error with filter search:', filterError);
-          }
-        }
-        
-        throw error;
-      }
-    },
-    enabled: !!id,
+  // Состояния - изменяем инициализацию showAllRecords
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [orderBy, setOrderBy] = useState<string>('createdAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  // Администратор по умолчанию видит все записи, обычный пользователь - только свои
+  const [showAllRecords, setShowAllRecords] = useState(isAdmin);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<any[]>([]);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  // Загрузка данных с обновленным синтаксисом для React Query v5
+  const { data: recordsData = { data: [] }, isLoading: recordsLoading, error: recordsError } = useQuery({
+    queryKey: ['records', { showAll: showAllRecords }],
+    queryFn: () => recordsApi.getAll({ showAll: showAllRecords }),
+    placeholderData: (previousData) => previousData, // Заменяет keepPreviousData
   });
 
-  // Получение кастомных полей
-  const { data: customFields = [] } = useQuery({
-    queryKey: ['customFields'],
-    queryFn: async () => {
-      const { data } = await api.get('/api/custom-fields?sort=order');
-      return data.data;
+  const { data: fieldsData = { data: [] } } = useQuery({
+    queryKey: ['fields'],
+    queryFn: () => fieldsApi.getAll(),
+    staleTime: 5 * 60 * 1000, // 5 минут
+  });
+
+  // Мутация для удаления записи
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => recordsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      setDeleteDialogOpen(false);
+      setSelectedRecord(null);
     },
   });
 
-  // Генерация штрихкода
-  useEffect(() => {
-    if (canvasRef.current && recordData) {
-      // Поддержка обоих форматов данных
-      const record = recordData.attributes || recordData;
-      if (record.barcode) {
-        JsBarcode(canvasRef.current, record.barcode, {
-          format: 'EAN13',
-          width: isMobile ? 1.5 : 2,
-          height: isMobile ? 80 : 100,
-          displayValue: true,
-          fontSize: isMobile ? 14 : 16,
-        });
-      }
-    }
-  }, [recordData, isMobile]);
-
-  const handleEdit = async (formData: any) => {
-    try {
-      // ИСПРАВЛЕНИЕ: Используем правильный ID для обновления
-      const recordId = recordData?.documentId || recordData?.id || id;
-      console.log('Updating record with ID:', recordId);
-      
-      await api.put(`/api/records/${recordId}`, { data: formData });
-      setIsEditDialogOpen(false);
-      refetch();
-    } catch (error) {
-      console.error('Error updating record:', error);
-    }
-  };
-
-  const handleBluetoothPrint = async () => {
-    setIsPrinting(true);
+  // Обработка фильтрации и сортировки
+  const filteredRecords = useMemo(() => {
+    if (!recordsData?.data) return [];
     
-    try {
-      if (!navigator.bluetooth) {
-        throw new Error('Bluetooth API не поддерживается в этом браузере');
-      }
+    let filtered = [...recordsData.data];
 
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: ['battery_service'] }],
-        optionalServices: ['serial_port_service'],
+    // Применяем поиск
+    if (searchQuery) {
+      filtered = filtered.filter(record => {
+        const searchableText = JSON.stringify(record).toLowerCase();
+        return searchableText.includes(searchQuery.toLowerCase());
       });
+    }
 
-      console.log('Connected to', device.name);
-      handleSystemPrint();
-    } catch (error) {
-      console.error('Bluetooth error:', error);
-      handleSystemPrint();
-    } finally {
-      setIsPrinting(false);
+    // Применяем фильтры
+    if (activeFilters.length > 0) {
+      filtered = applyFiltersToData(filtered, activeFilters);
+    }
+
+    // Применяем сортировку
+    filtered.sort((a, b) => {
+      const aValue = a.attributes?.[orderBy] || a[orderBy];
+      const bValue = b.attributes?.[orderBy] || b[orderBy];
+      
+      if (aValue < bValue) return order === 'asc' ? -1 : 1;
+      if (aValue > bValue) return order === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [recordsData?.data, searchQuery, activeFilters, orderBy, order]);
+
+  // Пагинация
+  const paginatedRecords = useMemo(() => {
+    const startIndex = page * rowsPerPage;
+    return filteredRecords.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredRecords, page, rowsPerPage]);
+
+  // Обработчики событий
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const handleSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedRecord(record);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedRecord(null);
+  };
+
+  const handleEdit = () => {
+    if (selectedRecord) {
+      navigate(`/records/${selectedRecord.id}/edit`);
+    }
+    handleMenuClose();
+  };
+
+  const handleDelete = () => {
+    setDeleteDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const confirmDelete = () => {
+    if (selectedRecord) {
+      deleteMutation.mutate(selectedRecord.id);
     }
   };
 
-  const handleSystemPrint = () => {
-    const record = recordData?.attributes || recordData;
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Печать штрихкода</title>
-        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-            margin: 0;
-          }
-          .inventory-number {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 20px;
-          }
-          .record-name {
-            font-size: 16px;
-            margin-bottom: 10px;
-          }
-          @media print {
-            body { margin: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        ${record?.name ? `<div class="record-name">${record.name}</div>` : ''}
-        <div class="inventory-number">
-          Инв. №: ${record?.inventoryNumber}
-        </div>
-        <canvas id="barcode"></canvas>
-        <script>
-          JsBarcode("#barcode", "${record?.barcode}", {
-            format: "EAN13",
-            width: 2,
-            height: 100,
-            displayValue: true,
-            fontSize: 16
-          });
-          window.onload = () => {
-            window.print();
-            setTimeout(() => window.close(), 1000);
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+  const handleApplyFilters = (filters: any[]) => {
+    setActiveFilters(filters);
+    setPage(0);
   };
 
-  if (isLoading) {
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setPage(0);
+  };
+
+  const formatFieldValue = (value: any, fieldType: string) => {
+    if (!value) return '';
+    
+    switch (fieldType) {
+      case 'money':
+        return new Intl.NumberFormat('ru-RU', {
+          style: 'currency',
+          currency: 'RUB'
+        }).format(parseFloat(value));
+      case 'number':
+        return new Intl.NumberFormat('ru-RU').format(parseFloat(value));
+      case 'checkbox':
+        return value ? 'Да' : 'Нет';
+      case 'date':
+        return format(new Date(value), 'dd.MM.yyyy', { locale: ru });
+      default:
+        return String(value);
+    }
+  };
+
+  if (recordsLoading) {
     return (
-      <Box display="flex" justifyContent="center" p={4}>
-        <CircularProgress />
+      <Box>
+        {Array.from(new Array(5)).map((_, index) => (
+          <Skeleton key={index} variant="rectangular" height={60} sx={{ mb: 1 }} />
+        ))}
       </Box>
     );
   }
 
-  if (!recordData) {
+  if (recordsError) {
     return (
-      <Box p={4}>
-        <Typography>Запись не найдена</Typography>
-        <Button onClick={() => navigate('/records')} sx={{ mt: 2 }}>
-          Назад к записям
-        </Button>
-      </Box>
+      <Alert severity="error">
+        Ошибка загрузки данных. Попробуйте обновить страницу.
+      </Alert>
     );
   }
-
-  const record = recordData.attributes || recordData;
-  const owner = record.owner?.data?.attributes || record.owner;
-  const canEdit = user?.id === (owner?.id || record.owner?.id) || user?.role?.type === 'admin';
 
   return (
     <Box>
-      {/* Заголовок с кнопками */}
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/records')}
-          size={isMobile ? 'small' : 'medium'}
-        >
-          {!isMobile && 'Назад к списку'}
-        </Button>
+      {/* Заголовок и действия */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" component="h1">
+          Записи
+        </Typography>
         
-        {canEdit && !isMobile && (
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<FilterIcon />}
+            onClick={() => setFiltersOpen(true)}
+            color={activeFilters.length > 0 ? 'primary' : 'inherit'}
+          >
+            <Badge badgeContent={activeFilters.length} color="primary">
+              Фильтры
+            </Badge>
+          </Button>
+          
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={() => setExportDialogOpen(true)}
+          >
+            Экспорт
+          </Button>
+          
           <Button
             variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => setIsEditDialogOpen(true)}
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/records/create')}
           >
-            Редактировать
+            Добавить
           </Button>
-        )}
+        </Box>
       </Box>
 
-      {/* Новый синтаксис Grid для MUI v7+ */}
-      <Grid container spacing={{ xs: 2, md: 3 }}>
-        {/* Основная информация */}
-        <Grid size={{ xs: 12, md: 8 }}>
-          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
-            <Typography variant={isMobile ? 'h6' : 'h5'} gutterBottom>
-              {record.name || 'Информация о записи'}
-            </Typography>
-            
-            <Stack spacing={2} sx={{ mt: 2 }}>
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Инвентарный номер
-                </Typography>
-                <Typography variant="body1">
-                  {record.inventoryNumber}
-                </Typography>
-              </Box>
+      {/* Поиск и фильтры */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Поиск */}
+            <TextField
+              placeholder="Поиск записей..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              size="small"
+              sx={{ minWidth: 250, flexGrow: 1 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: searchQuery && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={handleClearSearch}>
+                      <ClearIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
 
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Штрихкод
-                </Typography>
-                <Typography variant="body1" sx={{ wordBreak: 'break-all' }}>
-                  {record.barcode}
-                </Typography>
-              </Box>
-
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Владелец
-                </Typography>
-                <Typography variant="body1">
-                  {owner?.fullName || owner?.username}
-                </Typography>
-              </Box>
-
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Дата создания
-                </Typography>
-                <Typography variant="body1">
-                  {format(new Date(record.createdAt), 'dd MMMM yyyy, HH:mm', {
-                    locale: ru,
-                  })}
-                </Typography>
-              </Box>
-            </Stack>
-
-            {customFields.length > 0 && (
-              <>
-                <Divider sx={{ my: 3 }} />
-                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{ mb: 2 }}>
-                  Дополнительные поля
-                </Typography>
-
-                <Stack spacing={2}>
-                  {customFields.map((field: any) => {
-                    const fieldData = field.attributes || field;
-                    const value = record.dynamicData?.[field.id];
-                    if (value === undefined || value === null) return null;
-
-                    return (
-                      <Box key={field.id}>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          {fieldData.name}
-                        </Typography>
-                        <Typography variant="body1">
-                          {formatFieldValue(value, fieldData.fieldType)}
-                        </Typography>
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Штрихкод */}
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card>
-            <CardContent>
-              <Typography variant={isMobile ? 'subtitle1' : 'h6'} gutterBottom align="center">
-                Штрихкод
-              </Typography>
-              <Box display="flex" justifyContent="center" my={2}>
-                <canvas ref={canvasRef} />
-              </Box>
-              <Stack 
-                direction={isMobile ? 'column' : 'row'} 
-                spacing={1} 
-                justifyContent="center"
-              >
-                <Button
-                  variant="outlined"
-                  startIcon={<PrintIcon />}
-                  onClick={handleSystemPrint}
-                  size={isMobile ? 'small' : 'medium'}
-                  fullWidth={isMobile}
-                >
-                  Печать
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<BluetoothIcon />}
-                  onClick={handleBluetoothPrint}
-                  disabled={isPrinting}
-                  size={isMobile ? 'small' : 'medium'}
-                  fullWidth={isMobile}
-                >
-                  {isPrinting ? 'Подключение...' : 'Bluetooth'}
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Плавающая кнопка редактирования для мобильных */}
-      {canEdit && isMobile && (
-        <Fab
-          color="primary"
-          aria-label="edit"
-          sx={{
-            position: 'fixed',
-            bottom: 16,
-            right: 16,
-          }}
-          onClick={() => setIsEditDialogOpen(true)}
-        >
-          <EditIcon />
-        </Fab>
-      )}
-
-      {/* Диалог редактирования */}
-      <Dialog
-        open={isEditDialogOpen}
-        onClose={() => setIsEditDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: isMobile ? { 
-            m: 1, 
-            width: 'calc(100% - 16px)',
-            maxHeight: 'calc(100% - 16px)' 
-          } : {}
-        }}
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Редактирование записи</Typography>
-            <IconButton
-              edge="end"
-              color="inherit"
-              onClick={() => setIsEditDialogOpen(false)}
-              aria-label="close"
-            >
-              <CloseIcon />
-            </IconButton>
+            {/* Чекбокс для переключения между "Мои записи" и "Все записи" */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showAllRecords}
+                  onChange={(e) => setShowAllRecords(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PersonIcon fontSize="small" />
+                  <Typography variant="body2">
+                    {showAllRecords ? 'Показать все записи' : 'Показать только мои записи'}
+                  </Typography>
+                </Box>
+              }
+            />
           </Box>
-        </DialogTitle>
-        <DialogContent>
-          <DynamicForm
-            fields={customFields}
-            defaultValues={{
-              name: record.name,
-              ...record.dynamicData,
-            }}
-            onSubmit={handleEdit}
-            showNameField={true}
+
+          {/* Активные фильтры */}
+          {activeFilters.length > 0 && (
+            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                Активные фильтры:
+              </Typography>
+              {activeFilters.map((filter, index) => (
+                <Chip
+                  key={index}
+                  label={`${filter.field}: ${filter.operator} ${filter.value}`}
+                  onDelete={() => {
+                    const newFilters = activeFilters.filter((_, i) => i !== index);
+                    setActiveFilters(newFilters);
+                  }}
+                  size="small"
+                />
+              ))}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Таблица записей */}
+      <Card>
+        <CardContent sx={{ p: 0 }}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'inventory_number'}
+                      direction={orderBy === 'inventory_number' ? order : 'asc'}
+                      onClick={() => handleSort('inventory_number')}
+                    >
+                      Инвентарный номер
+                    </TableSortLabel>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'barcode'}
+                      direction={orderBy === 'barcode' ? order : 'asc'}
+                      onClick={() => handleSort('barcode')}
+                    >
+                      Штрихкод
+                    </TableSortLabel>
+                  </TableCell>
+
+                  {/* Динамические поля */}
+                  {fieldsData?.data?.map((field: any) => (
+                    <TableCell key={field.id}>
+                      <TableSortLabel
+                        active={orderBy === field.name}
+                        direction={orderBy === field.name ? order : 'asc'}
+                        onClick={() => handleSort(field.name)}
+                      >
+                        {field.display_name || field.name}
+                      </TableSortLabel>
+                    </TableCell>
+                  ))}
+
+                  <TableCell>
+                    <TableSortLabel
+                      active={orderBy === 'createdAt'}
+                      direction={orderBy === 'createdAt' ? order : 'asc'}
+                      onClick={() => handleSort('createdAt')}
+                    >
+                      Дата создания
+                    </TableSortLabel>
+                  </TableCell>
+
+                  {/* Показываем колонку "Владелец" всегда */}
+                  <TableCell>Владелец</TableCell>
+
+                  <TableCell align="right">Действия</TableCell>
+                </TableRow>
+              </TableHead>
+              
+              <TableBody>
+                {paginatedRecords.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={fieldsData?.data?.length + 5} align="center">
+                      <Typography color="text.secondary">
+                        Записи не найдены
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedRecords.map((record) => {
+                    const canEdit = record.attributes?.canEdit || isAdmin;
+                    const ownerData = record.attributes?.created_by?.data?.attributes || 
+                                     record.attributes?.owner?.data?.attributes || 
+                                     record.created_by || 
+                                     record.owner;
+                    
+                    return (
+                      <TableRow
+                        key={record.id}
+                        hover
+                        onClick={() => navigate(`/records/${record.id}`)}
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        <TableCell>
+                          {record.attributes?.inventory_number || record.inventory_number}
+                        </TableCell>
+                        
+                        <TableCell>
+                          {record.attributes?.barcode || record.barcode}
+                        </TableCell>
+
+                        {/* Динамические поля */}
+                        {fieldsData?.data?.map((field: any) => {
+                          const recordField = record.attributes?.fields?.find(
+                            (f: any) => f.field_name === field.name
+                          ) || record.fields?.find(
+                            (f: any) => f.field_name === field.name
+                          );
+                          
+                          const value = recordField?.value;
+                          
+                          return (
+                            <TableCell key={field.id}>
+                              {formatFieldValue(value, field.field_type)}
+                            </TableCell>
+                          );
+                        })}
+
+                        <TableCell>
+                          {format(
+                            new Date(record.attributes?.createdAt || record.createdAt),
+                            'dd.MM.yyyy HH:mm',
+                            { locale: ru }
+                          )}
+                        </TableCell>
+
+                        {/* Показываем владельца всегда */}
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <PersonIcon fontSize="small" color="action" />
+                            <Typography variant="body2">
+                              {ownerData?.fullName || ownerData?.username || 'Неизвестно'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+
+                        <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                          <Tooltip title={canEdit ? 'Доступны действия' : 'Недостаточно прав'}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleMenuClick(e, record)}
+                                disabled={!canEdit}
+                              >
+                                {canEdit ? <MoreVertIcon /> : <LockIcon />}
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Пагинация */}
+          <TablePagination
+            component="div"
+            count={filteredRecords.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            labelRowsPerPage="Записей на странице:"
+            labelDisplayedRows={({ from, to, count }) => `${from}–${to} из ${count}`}
           />
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
+
+      {/* Меню действий */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEdit} disabled={!selectedRecord?.attributes?.canEdit && !isAdmin}>
+          <EditIcon fontSize="small" sx={{ mr: 1 }} />
+          Редактировать
+        </MenuItem>
+        <MenuItem onClick={handleDelete} disabled={!selectedRecord?.attributes?.canEdit && !isAdmin}>
+          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+          Удалить
+        </MenuItem>
+      </Menu>
+
+      {/* Диалог фильтров */}
+      <AdvancedFilters
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        fields={fieldsData?.data || []}
+        onApplyFilters={handleApplyFilters}
+        initialFilters={activeFilters}
+      />
+
+      {/* Диалог экспорта */}
+      <ExportDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        records={filteredRecords}
+        fields={fieldsData?.data || []}
+      />
+
+      {/* Диалог подтверждения удаления */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Удалить запись?"
+        message="Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteDialogOpen(false)}
+        confirmText="Удалить"
+        cancelText="Отмена"
+        confirmColor="error"
+      />
     </Box>
   );
 };
 
-function formatFieldValue(value: any, fieldType: string): string {
-  switch (fieldType) {
-    case 'MONEY':
-      return `${Number(value).toLocaleString('ru-RU')} ₽`;
-    case 'CHECKBOX':
-      return value ? 'Да' : 'Нет';
-    default:
-      return String(value);
-  }
-}
-
-export default RecordDetailPage;
+export default RecordsPage;

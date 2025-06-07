@@ -14,6 +14,24 @@ export default {
       },
     },
     {
+      method: 'GET',
+      path: '/records/user-statistics',
+      handler: 'record.getUserStatistics',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'GET',
+      path: '/records/all-statistics',
+      handler: 'record.getAllUsersStatistics',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/records/export',
       handler: 'record.export',

@@ -14,7 +14,6 @@ import {
   Chip,
   FormControlLabel,
   Switch,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -58,13 +57,13 @@ export const RecordsPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role?.type === 'admin';
 
-  // Состояния
+  // Состояния - администратор по умолчанию видит все записи, обычный пользователь - только свои
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [searchQuery, setSearchQuery] = useState('');
   const [orderBy, setOrderBy] = useState<string>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  const [showAllRecords, setShowAllRecords] = useState(false);
+  const [showAllRecords, setShowAllRecords] = useState(isAdmin);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -72,17 +71,21 @@ export const RecordsPage: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
-  // Загрузка данных с обновленным синтаксисом для React Query v5
+  // Загрузка данных - добавляем refetchOnWindowFocus и правильный ключ кеша
   const { data: recordsData = { data: [] }, isLoading: recordsLoading, error: recordsError } = useQuery({
-    queryKey: ['records', { showAll: showAllRecords }],
-    queryFn: () => recordsApi.getAll({ showAll: showAllRecords }),
-    placeholderData: (previousData) => previousData, // Заменяет keepPreviousData
+    queryKey: ['records', showAllRecords], // Упрощаем ключ кеша
+    queryFn: () => {
+      console.log('Загружаем записи с showAll:', showAllRecords);
+      return recordsApi.getAll({ showAll: showAllRecords });
+    },
+    staleTime: 0, // Не кешируем данные
+    refetchOnWindowFocus: false,
   });
 
   const { data: fieldsData = { data: [] } } = useQuery({
     queryKey: ['fields'],
     queryFn: () => fieldsApi.getAll(),
-    staleTime: 5 * 60 * 1000, // 5 минут
+    staleTime: 5 * 60 * 1000,
   });
 
   // Мутация для удаления записи
@@ -95,7 +98,8 @@ export const RecordsPage: React.FC = () => {
     },
   });
 
-  // Обработка фильтрации и сортировки
+  // Обработка фильтрации и сортировки (применяем только поиск и дополнительные фильтры)
+  // Фильтрация по владельцу происходит на бэкенде через параметр showAll
   const filteredRecords = useMemo(() => {
     if (!recordsData?.data) return [];
     
@@ -109,16 +113,15 @@ export const RecordsPage: React.FC = () => {
       });
     }
 
-    // Применяем фильтры
+    // Применяем дополнительные фильтры
     if (activeFilters.length > 0) {
-            filtered = applyFiltersToData(filtered, activeFilters, fieldsData.data);
-
+      filtered = applyFiltersToData(filtered, activeFilters);
     }
 
     // Применяем сортировку
     filtered.sort((a, b) => {
-      const aValue = a.attributes?.[orderBy] || a[orderBy];
-      const bValue = b.attributes?.[orderBy] || b[orderBy];
+      const aValue = a[orderBy];
+      const bValue = b[orderBy];
       
       if (aValue < bValue) return order === 'asc' ? -1 : 1;
       if (aValue > bValue) return order === 'asc' ? 1 : -1;
@@ -141,6 +144,10 @@ export const RecordsPage: React.FC = () => {
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+  const handleClearSearch = () => {
+    setSearchQuery('');
     setPage(0);
   };
 
@@ -183,25 +190,30 @@ export const RecordsPage: React.FC = () => {
     setPage(0);
   };
 
-  const handleClearSearch = () => {
-    setSearchQuery('');
-    setPage(0);
+  // Обработчик переключения showAllRecords
+  const handleShowAllToggle = (checked: boolean) => {
+    console.log('Переключение showAll на:', checked);
+    setShowAllRecords(checked);
+    setPage(0); // Сбрасываем на первую страницу
+    
+    // Принудительно обновляем данные
+    queryClient.invalidateQueries({ queryKey: ['records'] });
   };
 
   const formatFieldValue = (value: any, fieldType: string) => {
     if (!value) return '';
     
     switch (fieldType) {
-      case 'money':
+      case 'MONEY':
         return new Intl.NumberFormat('ru-RU', {
           style: 'currency',
           currency: 'RUB'
         }).format(parseFloat(value));
-      case 'number':
+      case 'NUMBER':
         return new Intl.NumberFormat('ru-RU').format(parseFloat(value));
-      case 'checkbox':
+      case 'CHECKBOX':
         return value ? 'Да' : 'Нет';
-      case 'date':
+      case 'DATE':
         return format(new Date(value), 'dd.MM.yyyy', { locale: ru });
       default:
         return String(value);
@@ -250,7 +262,6 @@ export const RecordsPage: React.FC = () => {
             variant="outlined"
             startIcon={<DownloadIcon />}
             onClick={() => setExportDialogOpen(true)}
-            disabled={filteredRecords.length === 0}
           >
             Экспорт
           </Button>
@@ -258,22 +269,24 @@ export const RecordsPage: React.FC = () => {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/records/new')}
+            onClick={() => navigate('/records/create')}
           >
-            Добавить запись
+            Добавить
           </Button>
         </Box>
       </Box>
 
-      {/* Панель управления */}
+      {/* Поиск и фильтры */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Поиск */}
             <TextField
-              placeholder="Поиск по всем полям..."
+              placeholder="Поиск записей..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              size="small"
+              sx={{ minWidth: 250, flexGrow: 1 }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -282,62 +295,70 @@ export const RecordsPage: React.FC = () => {
                 ),
                 endAdornment: searchQuery && (
                   <InputAdornment position="end">
-                    <IconButton onClick={handleClearSearch} size="small">
+                    <IconButton size="small" onClick={handleClearSearch}>
                       <ClearIcon />
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
-              sx={{ minWidth: 300, flex: 1 }}
             />
 
-            {/* Переключатель показа всех записей для админа */}
-            {isAdmin && (
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showAllRecords}
-                    onChange={(e) => setShowAllRecords(e.target.checked)}
-                  />
-                }
-                label="Показать все записи"
-              />
-            )}
-
-            {/* Активные фильтры */}
-            {activeFilters.length > 0 && (
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                {activeFilters.map((filter, index) => (
-                  <Chip
-                    key={index}
-                    label={`${filter.field}: ${filter.value}`}
-                    size="small"
-                    onDelete={() => {
-                      const newFilters = activeFilters.filter((_, i) => i !== index);
-                      handleApplyFilters(newFilters);
-                    }}
-                  />
-                ))}
-              </Box>
-            )}
+            {/* Переключатель для фильтрации записей */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showAllRecords}
+                  onChange={(e) => handleShowAllToggle(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PersonIcon fontSize="small" />
+                  <Typography variant="body2">
+                    {showAllRecords ? 'Показывать все записи' : 'Показывать только мои записи'}
+                  </Typography>
+                </Box>
+              }
+            />
           </Box>
+
+          {/* Активные фильтры */}
+          {activeFilters.length > 0 && (
+            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                Активные фильтры:
+              </Typography>
+              {activeFilters.map((filter, index) => (
+                <Chip
+                  key={index}
+                  label={`${filter.field}: ${filter.operator} ${filter.value}`}
+                  onDelete={() => {
+                    const newFilters = activeFilters.filter((_, i) => i !== index);
+                    setActiveFilters(newFilters);
+                  }}
+                  size="small"
+                />
+              ))}
+            </Box>
+          )}
         </CardContent>
       </Card>
 
       {/* Таблица записей */}
       <Card>
-        <CardContent>
-          <TableContainer component={Paper}>
+        <CardContent sx={{ p: 0 }}>
+          <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
                   <TableCell>
                     <TableSortLabel
-                      active={orderBy === 'inventory_number'}
-                      direction={orderBy === 'inventory_number' ? order : 'asc'}
-                      onClick={() => handleSort('inventory_number')}
+                      active={orderBy === 'inventoryNumber'}
+                      direction={orderBy === 'inventoryNumber' ? order : 'asc'}
+                      onClick={() => handleSort('inventoryNumber')}
                     >
-                      Инв. номер
+                      Инвентарный номер
                     </TableSortLabel>
                   </TableCell>
                   
@@ -352,14 +373,14 @@ export const RecordsPage: React.FC = () => {
                   </TableCell>
 
                   {/* Динамические поля */}
-                  {fieldsData?.data?.map((field: any) => (
+                  {fieldsData?.data?.slice(0, 3).map((field: any) => (
                     <TableCell key={field.id}>
                       <TableSortLabel
                         active={orderBy === field.name}
                         direction={orderBy === field.name ? order : 'asc'}
                         onClick={() => handleSort(field.name)}
                       >
-                        {field.display_name || field.name}
+                        {field.name}
                       </TableSortLabel>
                     </TableCell>
                   ))}
@@ -374,9 +395,8 @@ export const RecordsPage: React.FC = () => {
                     </TableSortLabel>
                   </TableCell>
 
-                  {isAdmin && (
-                    <TableCell>Владелец</TableCell>
-                  )}
+                  {/* Столбец "Владелец" всегда виден */}
+                  <TableCell>Владелец</TableCell>
 
                   <TableCell align="right">Действия</TableCell>
                 </TableRow>
@@ -393,7 +413,8 @@ export const RecordsPage: React.FC = () => {
                   </TableRow>
                 ) : (
                   paginatedRecords.map((record) => {
-                    const canEdit = record.attributes?.canEdit || isAdmin;
+                    const canEdit = record.canEdit || record.isOwner || isAdmin;
+                    const ownerData = record.owner;
                     
                     return (
                       <TableRow
@@ -403,65 +424,54 @@ export const RecordsPage: React.FC = () => {
                         sx={{ cursor: 'pointer' }}
                       >
                         <TableCell>
-                          {record.attributes?.inventory_number || record.inventory_number}
+                          {record.inventoryNumber}
                         </TableCell>
                         
                         <TableCell>
-                          {record.attributes?.barcode || record.barcode}
+                          {record.barcode}
                         </TableCell>
 
                         {/* Динамические поля */}
-                        {fieldsData?.data?.map((field: any) => {
-                          const recordField = record.attributes?.fields?.find(
-                            (f: any) => f.field_name === field.name
-                          ) || record.fields?.find(
-                            (f: any) => f.field_name === field.name
-                          );
-                          
-                          const value = recordField?.value;
+                        {fieldsData?.data?.slice(0, 3).map((field: any) => {
+                          const value = record.dynamicData?.[field.id];
                           
                           return (
                             <TableCell key={field.id}>
-                              {formatFieldValue(value, field.field_type)}
+                              {formatFieldValue(value, field.fieldType)}
                             </TableCell>
                           );
                         })}
 
                         <TableCell>
                           {format(
-                            new Date(record.attributes?.createdAt || record.createdAt),
+                            new Date(record.createdAt),
                             'dd.MM.yyyy HH:mm',
                             { locale: ru }
                           )}
                         </TableCell>
 
-                        {isAdmin && (
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <PersonIcon fontSize="small" color="action" />
-                              <Typography variant="body2">
-                                {record.attributes?.created_by?.full_name || 
-                                 record.attributes?.created_by?.username ||
-                                 record.created_by?.full_name ||
-                                 record.created_by?.username ||
-                                 'Неизвестно'}
-                              </Typography>
-                              {!canEdit && (
-                                <Tooltip title="Только для чтения">
-                                  <LockIcon fontSize="small" color="disabled" />
-                                </Tooltip>
-                              )}
-                            </Box>
-                          </TableCell>
-                        )}
+                        {/* Столбец "Владелец" всегда виден */}
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <PersonIcon fontSize="small" color="action" />
+                            <Typography variant="body2">
+                              {ownerData?.fullName || ownerData?.username || 'Неизвестно'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
 
                         <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => handleMenuClick(e, record)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
+                          <Tooltip title={canEdit ? 'Доступны действия' : 'Недостаточно прав'}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleMenuClick(e, record)}
+                                disabled={!canEdit}
+                              >
+                                {canEdit ? <MoreVertIcon /> : <LockIcon />}
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     );
@@ -492,11 +502,11 @@ export const RecordsPage: React.FC = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={handleEdit} disabled={!selectedRecord?.attributes?.canEdit && !isAdmin}>
+        <MenuItem onClick={handleEdit} disabled={!selectedRecord?.canEdit && !isAdmin}>
           <EditIcon fontSize="small" sx={{ mr: 1 }} />
           Редактировать
         </MenuItem>
-        <MenuItem onClick={handleDelete} disabled={!selectedRecord?.attributes?.canEdit && !isAdmin}>
+        <MenuItem onClick={handleDelete} disabled={!selectedRecord?.canEdit && !isAdmin}>
           <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
           Удалить
         </MenuItem>

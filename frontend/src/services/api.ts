@@ -44,8 +44,20 @@ api.interceptors.response.use(
 
 // API для записей
 export const recordsApi = {
+  // Получение всех записей с поддержкой параметра showAll
   getAll: async (params?: { showAll?: boolean }) => {
-    const response = await api.get('/api/records', { params });
+    console.log('API getAll вызван с параметрами:', params);
+    
+    const queryParams: any = {};
+    
+    // Передаем параметр showAll если он указан
+    if (params?.showAll !== undefined) {
+      queryParams.showAll = params.showAll;
+    }
+    
+    console.log('Отправляем запрос с параметрами:', queryParams);
+    const response = await api.get('/api/records', { params: queryParams });
+    console.log('API ответ:', response.data);
     return response.data;
   },
   
