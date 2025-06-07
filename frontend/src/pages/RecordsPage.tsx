@@ -1,234 +1,566 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-import React, { useState } from 'react';
+// frontend/src/pages/Records/RecordsPage.tsx
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Button,
-  Paper,
+  Card,
+  CardContent,
   Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   InputAdornment,
   IconButton,
-  useTheme,
-  useMediaQuery,
-  Fab,
-  Zoom,
+  Chip,
+  FormControlLabel,
+  Switch,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TableSortLabel,
+  Skeleton,
+  Alert,
+  Menu,
+  MenuItem,
+  Tooltip,
+  Badge,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
+  FilterList as FilterIcon,
+  Download as DownloadIcon,
+  MoreVert as MoreVertIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Lock as LockIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-import RecordsTable from '../components/Records/RecordsTable';
-import DynamicForm from '../components/Records/DynamicForm';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { AdvancedFilters, applyFiltersToData } from '../../components/Records/AdvancedFilters';
+import { recordsApi, fieldsApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { ExportDialog } from '../../components/Records/ExportDialog';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 
-const RecordsPage: React.FC = () => {
+interface RecordsPageProps {}
+
+export const RecordsPage: React.FC<RecordsPageProps> = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role?.type === 'admin';
+
+  // Состояния
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(isMobile ? 10 : 25);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [orderBy, setOrderBy] = useState<string>('createdAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [showAllRecords, setShowAllRecords] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<any[]>([]);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
-  // Получение кастомных полей
-  const { data: customFields = [] } = useQuery({
-    queryKey: ['customFields'],
-    queryFn: async () => {
-      const { data } = await api.get('/api/custom-fields?sort=order');
-      console.log('Custom fields response:', data);
-      return data.data;
-    },
-  });
-
-  const { data: recordsData, isLoading, refetch, error } = useQuery({
-    queryKey: ['records', page, pageSize, searchQuery],
-    queryFn: async () => {
-      const params: any = {
-        'pagination[page]': page + 1,
-        'pagination[pageSize]': pageSize,
-        'populate': '*',
-      };
-
-      if (searchQuery) {
-        params['filters[$or][0][inventoryNumber][$containsi]'] = searchQuery;
-        params['filters[$or][1][barcode][$containsi]'] = searchQuery;
-        params['filters[$or][2][name][$containsi]'] = searchQuery;
-      }
-
-      console.log('Request params:', params);
-      
-      const { data } = await api.get('/api/records', { params });
-      console.log('Records response:', data);
-      return data;
-    },
-    retry: 1,
-    staleTime: 30000,
-  });
-
-  // Показываем ошибку если есть
-  React.useEffect(() => {
-    if (error) {
-      console.error('Error loading records:', error);
+  // Загрузка данных
+  const { data: recordsData, isLoading: recordsLoading, error: recordsError } = useQuery(
+    ['records', { showAll: showAllRecords }],
+    () => recordsApi.getAll({ showAll: showAllRecords }),
+    {
+      keepPreviousData: true,
     }
-  }, [error]);
+  );
 
-  React.useEffect(() => {
-    setPageSize(isMobile ? 10 : 25);
-  }, [isMobile]);
+  const { data: fieldsData } = useQuery(
+    'fields',
+    () => fieldsApi.getAll(),
+    {
+      staleTime: 5 * 60 * 1000, // 5 минут
+    }
+  );
 
-  const handleCreateRecord = async (formData: any) => {
-    try {
-      console.log('Creating record with data:', formData);
-      
-      const response = await api.post('/api/records', { 
-        data: formData 
+  // Мутация для удаления записи
+  const deleteMutation = useMutation(
+    (id: string) => recordsApi.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('records');
+        setDeleteDialogOpen(false);
+        setSelectedRecord(null);
+      },
+    }
+  );
+
+  // Обработка данных
+  const records = useMemo(() => {
+    if (!recordsData?.data) return [];
+    
+    let filtered = recordsData.data;
+
+    // Применяем поиск
+    if (searchQuery) {
+      filtered = filtered.filter((record: any) => {
+        const searchLower = searchQuery.toLowerCase();
+        
+        // Поиск по инвентарному номеру
+        if (record.attributes.inventory_number?.toLowerCase().includes(searchLower)) {
+          return true;
+        }
+        
+        // Поиск по полям
+        const fields = record.attributes.fields || [];
+        return fields.some((field: any) => 
+          field.value?.toString().toLowerCase().includes(searchLower)
+        );
       });
-      
-      console.log('Create response:', response);
-      
-      setIsCreateDialogOpen(false);
-      refetch();
-    } catch (error: any) {
-      console.error('Error creating record:', error);
-      console.error('Error response:', error.response?.data);
-      
-      let errorMessage = 'Неизвестная ошибка';
-      if (error.response?.data?.error?.message) {
-        errorMessage = error.response.data.error.message;
-      } else if (error.response?.data?.error?.details?.errors) {
-        errorMessage = error.response.data.error.details.errors.map((e: any) => e.message).join(', ');
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(`Ошибка: ${errorMessage}`);
     }
+
+    // Применяем расширенные фильтры
+    if (activeFilters.length > 0 && fieldsData?.data) {
+      filtered = applyFiltersToData(filtered, activeFilters, fieldsData.data);
+    }
+
+    // Сортировка
+    filtered.sort((a: any, b: any) => {
+      let aValue = a.attributes[orderBy];
+      let bValue = b.attributes[orderBy];
+
+      // Для полей используем первое значение
+      if (orderBy.startsWith('field_')) {
+        const fieldName = orderBy.replace('field_', '');
+        aValue = a.attributes.fields?.find((f: any) => f.field_name === fieldName)?.value || '';
+        bValue = b.attributes.fields?.find((f: any) => f.field_name === fieldName)?.value || '';
+      }
+
+      if (aValue < bValue) return order === 'asc' ? -1 : 1;
+      if (aValue > bValue) return order === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [recordsData, searchQuery, activeFilters, fieldsData, orderBy, order]);
+
+  // Пагинация
+  const paginatedRecords = useMemo(() => {
+    const start = page * rowsPerPage;
+    const end = start + rowsPerPage;
+    return records.slice(start, end);
+  }, [records, page, rowsPerPage]);
+
+  // Обработчики
+  const handleSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
   };
 
   const handleRowClick = (record: any) => {
-    // ИСПРАВЛЕНИЕ: Используем documentId вместо id
-    const recordId = record.documentId || record.id;
-    console.log('Navigating to record:', recordId, 'Full record:', record);
-    navigate(`/records/${recordId}`);
+    if (record.attributes.canEdit || isAdmin) {
+      navigate(`/records/${record.id}`);
+    }
   };
 
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedRecord(record);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleEdit = () => {
+    if (selectedRecord) {
+      navigate(`/records/${selectedRecord.id}/edit`);
+    }
+    handleMenuClose();
+  };
+
+  const handleDelete = () => {
+    setDeleteDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const confirmDelete = () => {
+    if (selectedRecord) {
+      deleteMutation.mutate(selectedRecord.id);
+    }
+  };
+
+  const handleApplyFilters = (filters: any[]) => {
+    setActiveFilters(filters);
+    setPage(0);
+  };
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setActiveFilters([]);
+    setPage(0);
+  };
+
+  // Колонки таблицы
+  const columns = useMemo(() => {
+    const baseColumns = [
+      { id: 'inventory_number', label: 'Инв. номер', sortable: true },
+      { id: 'createdAt', label: 'Дата создания', sortable: true },
+    ];
+
+    // Добавляем динамические колонки из полей
+    if (fieldsData?.data) {
+      fieldsData.data.forEach((field: any) => {
+        baseColumns.push({
+          id: `field_${field.name}`,
+          label: field.display_name || field.name,
+          sortable: true,
+        });
+      });
+    }
+
+    if (showAllRecords || isAdmin) {
+      baseColumns.push({
+        id: 'created_by',
+        label: 'Создатель',
+        sortable: true,
+      });
+    }
+
+    baseColumns.push({
+      id: 'actions',
+      label: 'Действия',
+      sortable: false,
+    });
+
+    return baseColumns;
+  }, [fieldsData, showAllRecords, isAdmin]);
+
+  // Форматирование значения поля
+  const formatFieldValue = (field: any) => {
+    if (!field || field.value === null || field.value === undefined) return '—';
+
+    switch (field.field_type) {
+      case 'money':
+        return new Intl.NumberFormat('ru-RU', {
+          style: 'currency',
+          currency: 'RUB',
+        }).format(parseFloat(field.value) || 0);
+      case 'checkbox':
+        return field.value ? '✓' : '✗';
+      case 'date':
+        return format(new Date(field.value), 'dd.MM.yyyy', { locale: ru });
+      default:
+        return field.value.toString();
+    }
+  };
+
+  if (recordsError) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">
+          Ошибка загрузки записей. Попробуйте обновить страницу.
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
-    <Box>
-      {/* Заголовок и кнопка добавления для десктопа */}
-      {!isMobile && (
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h4">Записи</Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setIsCreateDialogOpen(true)}
-          >
-            Добавить запись
-          </Button>
-        </Box>
-      )}
+    <Box sx={{ p: 3 }}>
+      <Card>
+        <CardContent>
+          {/* Заголовок и действия */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5" component="h1">
+              Записи
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => setExportDialogOpen(true)}
+              >
+                Экспорт
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/records/new')}
+              >
+                Добавить запись
+              </Button>
+            </Box>
+          </Box>
 
-      {/* Мобильный заголовок */}
-      {isMobile && (
-        <Typography variant="h5" sx={{ mb: 2 }}>
-          Записи
-        </Typography>
-      )}
-
-      {/* Поиск */}
-      <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
-        <TextField
-          fullWidth
-          size={isMobile ? "small" : "medium"}
-          variant="outlined"
-          placeholder={isMobile ? "Поиск..." : "Поиск по инвентарному номеру, штрихкоду или названию"}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-            endAdornment: searchQuery && (
-              <InputAdornment position="end">
-                <IconButton 
-                  onClick={() => setSearchQuery('')}
-                  size={isMobile ? "small" : "medium"}
+          {/* Фильтры и поиск */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+              <TextField
+                placeholder="Поиск по инвентарному номеру или полям..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                size="small"
+                sx={{ flex: 1, maxWidth: 400 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setSearchQuery('')}>
+                        <ClearIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              
+              <Badge badgeContent={activeFilters.length} color="primary">
+                <Button
+                  variant="outlined"
+                  startIcon={<FilterIcon />}
+                  onClick={() => setFiltersOpen(true)}
                 >
-                  <ClearIcon />
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Paper>
+                  Фильтры
+                </Button>
+              </Badge>
 
-      {/* Таблица записей */}
-      <RecordsTable
-        records={recordsData?.data || []}
-        customFields={customFields}
-        isLoading={isLoading}
-        page={page}
-        pageSize={pageSize}
-        totalPages={recordsData?.meta?.pagination?.pageCount || 0}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onRowClick={handleRowClick}
+              {(searchQuery || activeFilters.length > 0) && (
+                <Button
+                  size="small"
+                  onClick={clearAllFilters}
+                  startIcon={<ClearIcon />}
+                >
+                  Очистить все
+                </Button>
+              )}
+
+              {isAdmin && (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showAllRecords}
+                      onChange={(e) => setShowAllRecords(e.target.checked)}
+                    />
+                  }
+                  label="Показать все записи"
+                />
+              )}
+            </Box>
+
+            {/* Активные фильтры */}
+            {activeFilters.length > 0 && (
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {activeFilters.map((filter, index) => {
+                  const field = fieldsData?.data.find((f: any) => f.id === filter.fieldId);
+                  return (
+                    <Chip
+                      key={index}
+                      label={`${field?.display_name || field?.name}: ${filter.operator}`}
+                      onDelete={() => {
+                        const newFilters = activeFilters.filter((_, i) => i !== index);
+                        setActiveFilters(newFilters);
+                      }}
+                      size="small"
+                    />
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
+
+          {/* Таблица */}
+          <TableContainer component={Paper} variant="outlined">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  {columns.map((column) => (
+                    <TableCell key={column.id}>
+                      {column.sortable ? (
+                        <TableSortLabel
+                          active={orderBy === column.id}
+                          direction={orderBy === column.id ? order : 'asc'}
+                          onClick={() => handleSort(column.id)}
+                        >
+                          {column.label}
+                        </TableSortLabel>
+                      ) : (
+                        column.label
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {recordsLoading ? (
+                  // Скелетон загрузки
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <TableRow key={index}>
+                      {columns.map((column) => (
+                        <TableCell key={column.id}>
+                          <Skeleton />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : paginatedRecords.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} align="center">
+                      <Typography color="text.secondary" sx={{ py: 3 }}>
+                        {searchQuery || activeFilters.length > 0
+                          ? 'Записи не найдены. Попробуйте изменить параметры поиска.'
+                          : 'Записей пока нет. Нажмите "Добавить запись" для создания первой.'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedRecords.map((record: any) => {
+                    const canEdit = record.attributes.canEdit || isAdmin;
+                    const isOwner = record.attributes.isOwner;
+                    
+                    return (
+                      <TableRow
+                        key={record.id}
+                        hover
+                        onClick={() => handleRowClick(record)}
+                        sx={{
+                          cursor: canEdit ? 'pointer' : 'default',
+                          opacity: canEdit ? 1 : 0.7,
+                        }}
+                      >
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {record.attributes.inventory_number}
+                            {!canEdit && (
+                              <Tooltip title="Только просмотр">
+                                <LockIcon fontSize="small" color="action" />
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(record.attributes.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru })}
+                        </TableCell>
+                        
+                        {/* Динамические поля */}
+                        {fieldsData?.data.map((fieldDef: any) => {
+                          const field = record.attributes.fields?.find(
+                            (f: any) => f.field_name === fieldDef.name
+                          );
+                          return (
+                            <TableCell key={fieldDef.id}>
+                              {field ? formatFieldValue(field) : '—'}
+                            </TableCell>
+                          );
+                        })}
+                        
+                        {/* Создатель */}
+                        {(showAllRecords || isAdmin) && (
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <PersonIcon fontSize="small" color="action" />
+                              <Typography variant="body2">
+                                {record.attributes.created_by?.data?.attributes?.username || '—'}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                        )}
+                        
+                        {/* Действия */}
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleMenuClick(e, record)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Пагинация */}
+          <TablePagination
+            component="div"
+            count={records.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            labelRowsPerPage="Записей на странице:"
+            labelDisplayedRows={({ from, to, count }) => `${from}–${to} из ${count}`}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Меню действий */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEdit} disabled={!selectedRecord?.attributes?.canEdit && !isAdmin}>
+          <EditIcon fontSize="small" sx={{ mr: 1 }} />
+          Редактировать
+        </MenuItem>
+        <MenuItem onClick={handleDelete} disabled={!selectedRecord?.attributes?.canEdit && !isAdmin}>
+          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+          Удалить
+        </MenuItem>
+      </Menu>
+
+      {/* Диалог фильтров */}
+      <AdvancedFilters
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        fields={fieldsData?.data || []}
+        onApplyFilters={handleApplyFilters}
+        initialFilters={activeFilters}
       />
 
-      {/* Плавающая кнопка для мобильных */}
-      {isMobile && (
-        <Zoom in={true}>
-          <Fab
-            color="primary"
-            aria-label="add"
-            sx={{
-              position: 'fixed',
-              bottom: 16,
-              right: 16,
-            }}
-            onClick={() => setIsCreateDialogOpen(true)}
-          >
-            <AddIcon />
-          </Fab>
-        </Zoom>
-      )}
+      {/* Диалог экспорта */}
+      <ExportDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        records={records}
+        fields={fieldsData?.data || []}
+      />
 
-      {/* Диалог создания записи */}
-      <Dialog
-        open={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: isMobile ? { 
-            m: 1, 
-            width: 'calc(100% - 16px)',
-            maxHeight: 'calc(100% - 16px)' 
-          } : {}
-        }}
-      >
-        <DialogTitle>Создание новой записи</DialogTitle>
-        <DialogContent>
-          <DynamicForm
-            fields={customFields}
-            onSubmit={handleCreateRecord}
-            showNameField={true}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setIsCreateDialogOpen(false)}>Отмена</Button>
-        </DialogActions>
-      </Dialog>
+      {/* Диалог подтверждения удаления */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Удалить запись?"
+        message="Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteDialogOpen(false)}
+        confirmText="Удалить"
+        cancelText="Отмена"
+        confirmColor="error"
+      />
     </Box>
   );
 };
