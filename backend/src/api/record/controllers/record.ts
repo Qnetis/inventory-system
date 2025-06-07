@@ -62,22 +62,22 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       const user = ctx.state.user;
       const { showAll } = ctx.query;
       
-      console.log('Find records - User:', user.username, 'Role:', user.role?.type, 'showAll:', showAll);
+      // ИСПРАВЛЕНИЕ: Правильно парсим boolean из строки
+      const showAllBool = showAll === 'true' || showAll === true;
+      
+      console.log('Find records - User:', user.username, 'Role:', user.role?.type, 'showAll:', showAll, 'parsed:', showAllBool);
       
       // Определяем фильтры на основе прав пользователя и параметра showAll
       let filters: any = {};
       
-      // ИСПРАВЛЕНИЕ: Логика фильтрации
-      if (user.role?.type === 'admin') {
-        // Администратор может видеть все записи или только свои в зависимости от showAll
-        if (!showAll) {
-          // Если showAll = false, показываем только записи администратора
-          filters.owner = user.id;
-        }
-        // Если showAll = true, показываем все записи (без фильтра)
+      // ИСПРАВЛЕНИЕ: Новая логика - любой пользователь может видеть все записи при showAll=true
+      if (showAllBool) {
+        // Если showAll = true, показываем все записи (без фильтра) для любого пользователя
+        console.log('Пользователь просит все записи, фильтр не применяем');
       } else {
-        // Обычный пользователь может видеть только свои записи независимо от showAll
+        // Если showAll = false, показываем только записи текущего пользователя
         filters.owner = user.id;
+        console.log('Пользователь просит только свои записи, применяем фильтр по owner:', user.id);
       }
       
       console.log('Applied filters:', filters);
@@ -114,18 +114,22 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       const { id: documentId } = ctx.params;
       const user = ctx.state.user;
       
-      console.log('FindOne called with documentId:', documentId);
+      console.log('🔍 FindOne called with documentId:', documentId);
+      console.log('👤 User:', user.username, 'Role:', user.role?.type);
       
       // Пытаемся найти по documentId
       let record;
       try {
+        console.log('🎯 Пытаемся найти по documentId:', documentId);
         record = await strapi.documents('api::record.record').findOne({
           documentId: documentId,
           populate: ['owner'],
           status: 'published'
         });
+        console.log('✅ Запись найдена по documentId:', !!record);
       } catch (error) {
-        console.log('Document not found by documentId, trying by id...');
+        console.log('❌ Document not found by documentId, trying by id...');
+        console.log('Error details:', error.message);
         
         // Если не найдено по documentId, пробуем найти по id
         const records = await strapi.documents('api::record.record').findMany({
@@ -134,12 +138,15 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
           status: 'published'
         });
         
+        console.log('🔍 Поиск по id результат:', records.length, 'записей');
         if (records.length > 0) {
           record = records[0];
+          console.log('✅ Запись найдена по id:', record.id, 'documentId:', record.documentId);
         }
       }
       
       if (!record) {
+        console.log('❌ Record not found with any method');
         return ctx.notFound('Record not found');
       }
       
@@ -492,16 +499,22 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       const { format = 'csv', fields = [] } = ctx.request.body;
       const { showAll } = ctx.query;
       
+      // ИСПРАВЛЕНИЕ: Правильно парсим boolean из строки
+      const showAllBool = showAll === 'true' || showAll === true;
+      
+      console.log('Export - User:', user.username, 'Role:', user.role?.type, 'showAll:', showAll, 'parsed:', showAllBool);
+      
       // Определяем фильтры на основе прав пользователя
       let filters: any = {};
       
-      // ИСПРАВЛЕНИЕ: Применяем ту же логику что и в find
-      if (user.role?.type === 'admin') {
-        if (!showAll) {
-          filters.owner = user.id;
-        }
+      // ИСПРАВЛЕНИЕ: Применяем ту же логику что и в find - любой пользователь может видеть все записи
+      if (showAllBool) {
+        // Если showAll = true, экспортируем все записи (без фильтра) для любого пользователя
+        console.log('Export: Пользователь просит все записи, фильтр не применяем');
       } else {
+        // Если showAll = false, экспортируем только записи текущего пользователя
         filters.owner = user.id;
+        console.log('Export: Пользователь просит только свои записи, применяем фильтр по owner:', user.id);
       }
       
       // Получаем все записи с использованием Document Service
