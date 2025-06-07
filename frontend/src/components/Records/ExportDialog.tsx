@@ -1,4 +1,6 @@
 // frontend/src/components/Records/ExportDialog.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -85,10 +87,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       // Системные поля
       if (includeSystemFields) {
         row.push(
-          `"${record.attributes.inventory_number || ''}"`,
-          `"${record.attributes.barcode || ''}"`,
-          `"${new Date(record.attributes.createdAt).toLocaleDateString('ru-RU')}"`,
-          `"${record.attributes.created_by?.full_name || record.attributes.created_by?.username || ''}"`
+          `"${record.attributes?.inventory_number || record.inventory_number || ''}"`,
+          `"${record.attributes?.barcode || record.barcode || ''}"`,
+          `"${new Date(record.attributes?.createdAt || record.createdAt).toLocaleDateString('ru-RU')}"`,
+          `"${record.attributes?.created_by?.full_name || record.attributes?.created_by?.username || record.created_by?.full_name || record.created_by?.username || ''}"`
         );
       }
       
@@ -96,7 +98,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       selectedFields.forEach(fieldId => {
         const field = fields.find(f => f.id === fieldId);
         if (field) {
-          const recordField = record.attributes.fields?.find(
+          const recordField = record.attributes?.fields?.find(
+            (f: any) => f.field_name === field.name
+          ) || record.fields?.find(
             (f: any) => f.field_name === field.name
           );
           
@@ -267,4 +271,4 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       </DialogActions>
     </Dialog>
   );
-};ы
+};
