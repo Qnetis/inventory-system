@@ -19,8 +19,7 @@ import {
   MenuItem,
   FormControlLabel,
   Checkbox,
-  IconButton,
-  Tooltip,
+  IconButton
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -49,12 +48,43 @@ const RecordDetailPage: React.FC = () => {
   
   const { control, handleSubmit, reset, formState: { errors } } = useForm();
 
+  // ДОБАВЛЕНО: Детальное логирование для отладки
+  console.log('🔍 RecordDetailPage - ID из URL:', id);
+
+  // ДОБАВЛЕНО: Проверка на недопустимые ID
+  React.useEffect(() => {
+    if (id === 'create' || id === 'new' || !id) {
+      console.log('❌ Недопустимый ID, перенаправление на список');
+      navigate('/records', { replace: true });
+      return;
+    }
+  }, [id, navigate]);
+
   // Загрузка записи
   const { data: recordData, isLoading: recordLoading, error: recordError } = useQuery({
     queryKey: ['record', id],
-    queryFn: () => recordsApi.getById(id!),
-    enabled: !!id,
+    queryFn: async () => {
+      if (!id || id === 'create' || id === 'new') {
+        throw new Error('Invalid record ID');
+      }
+      console.log('📡 Загружаем запись с ID:', id);
+      return recordsApi.getById(id);
+    },
+    enabled: !!id && id !== 'create' && id !== 'new',
+    retry: (failureCount, error: any) => {
+      console.log('🔄 Попытка повтора загрузки:', failureCount, 'Ошибка:', error?.response?.status);
+      // Не повторяем запрос для 404 ошибок
+      if (error?.response?.status === 404) {
+        return false;
+      }
+      return failureCount < 3;
+    },
   });
+
+  // ДОБАВЛЕНО: Логирование состояния загрузки
+  console.log('📦 Данные записи:', recordData);
+  console.log('🎯 Record:', recordData?.data);
+  console.log('❌ Ошибка загрузки:', recordError);
 
   // Загрузка полей
   const { data: fieldsData = { data: [] } } = useQuery({
@@ -83,43 +113,46 @@ const RecordDetailPage: React.FC = () => {
   });
 
   const record = recordData?.data;
-  const customFields = fieldsData?.data || [];
+  const fields = fieldsData?.data || [];
 
-  // Определяем права пользователя
-  const canEdit = record?.canEdit || record?.isOwner || user?.role?.type === 'admin';
-  const isOwner = record?.isOwner || record?.owner?.id === user?.id;
+  // Определяем права доступа
+  const canEdit = record?.canEdit || record?.isOwner || (user?.role?.type === 'admin');
+
+  // Сброс формы при изменении данных записи
+  useEffect(() => {
+    if (record && !recordLoading) {
+      const formData: any = {
+        name: record.name || '',
+      };
+
+      // Заполняем динамические поля
+      if (record.dynamicData) {
+        Object.keys(record.dynamicData).forEach(fieldId => {
+          formData[`dynamicData.${fieldId}`] = record.dynamicData[fieldId];
+        });
+      }
+
+      reset(formData);
+    }
+  }, [record, recordLoading, reset]);
 
   // Генерация штрихкода
   useEffect(() => {
-    if (record?.barcode) {
+    if (record?.barcode && !recordLoading) {
       try {
         const canvas = document.createElement('canvas');
         JsBarcode(canvas, record.barcode, {
-          format: 'CODE128',
+          format: 'EAN13',
           width: 2,
           height: 100,
           displayValue: true,
         });
         setBarcodeDataUrl(canvas.toDataURL());
       } catch (error) {
-        console.error('Error generating barcode:', error);
+        console.error('Ошибка генерации штрихкода:', error);
       }
     }
-  }, [record?.barcode]);
-
-  // Сброс формы при изменении записи
-  useEffect(() => {
-    if (record) {
-      reset({
-        name: record.name || '',
-        dynamicData: record.dynamicData || {},
-      });
-    }
-  }, [record, reset]);
-
-  const onSubmit = (data: any) => {
-    updateMutation.mutate(data);
-  };
+  }, [record?.barcode, recordLoading]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -127,7 +160,20 @@ const RecordDetailPage: React.FC = () => {
 
   const handleCancel = () => {
     setIsEditing(false);
-    reset();
+    // Сброс формы к исходным данным
+    if (record) {
+      const formData: any = {
+        name: record.name || '',
+      };
+      
+      if (record.dynamicData) {
+        Object.keys(record.dynamicData).forEach(fieldId => {
+          formData[`dynamicData.${fieldId}`] = record.dynamicData[fieldId];
+        });
+      }
+      
+      reset(formData);
+    }
   };
 
   const handleDelete = () => {
@@ -136,33 +182,45 @@ const RecordDetailPage: React.FC = () => {
     }
   };
 
+  const onSubmit = (data: any) => {
+    console.log('Form data:', data);
+    
+    const updateData: any = {
+      name: data.name || record?.name,
+      dynamicData: {},
+    };
+
+    // Собираем данные динамических полей
+    Object.keys(data).forEach(key => {
+      if (key.startsWith('dynamicData.')) {
+        const fieldId = key.replace('dynamicData.', '');
+        updateData.dynamicData[fieldId] = data[key];
+      }
+    });
+
+    console.log('Update data:', updateData);
+    updateMutation.mutate(updateData);
+  };
+
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
-    if (printWindow && barcodeDataUrl) {
+    if (printWindow) {
       printWindow.document.write(`
         <html>
           <head>
-            <title>Печать штрихкода - ${record?.inventoryNumber}</title>
+            <title>Печать штрихкода</title>
             <style>
-              body { 
-                font-family: Arial, sans-serif; 
-                text-align: center; 
-                padding: 20px; 
-              }
-              .barcode { 
-                margin: 20px 0; 
-              }
-              .info { 
-                margin: 10px 0; 
-                font-size: 14px; 
-              }
+              body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+              .barcode { margin: 20px 0; }
+              .info { margin: 10px 0; font-size: 14px; }
             </style>
           </head>
           <body>
-            <h3>Инвентарный номер: ${record?.inventoryNumber}</h3>
+            <h2>${record?.name || 'Запись'}</h2>
+            <div class="info">Инвентарный номер: ${record?.inventoryNumber}</div>
             <div class="info">Штрихкод: ${record?.barcode}</div>
             <div class="barcode">
-              <img src="${barcodeDataUrl}" alt="Barcode" />
+              <img src="${barcodeDataUrl}" alt="Штрихкод" />
             </div>
             <div class="info">Дата создания: ${record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : ''}</div>
             <script>
@@ -221,6 +279,7 @@ const RecordDetailPage: React.FC = () => {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" height="400px">
         <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Загрузка записи...</Typography>
       </Box>
     );
   }
@@ -230,6 +289,11 @@ const RecordDetailPage: React.FC = () => {
       <Box>
         <Alert severity="error" sx={{ mb: 2 }}>
           Ошибка загрузки записи. Возможно, запись не найдена или у вас нет прав доступа.
+          {recordError && (
+            <Box sx={{ mt: 1, fontSize: '0.875rem', opacity: 0.8 }}>
+              Детали ошибки: {(recordError as any)?.message || 'Неизвестная ошибка'}
+            </Box>
+          )}
         </Alert>
         <Button startIcon={<BackIcon />} onClick={() => navigate('/records')}>
           Вернуться к списку
@@ -317,7 +381,7 @@ const RecordDetailPage: React.FC = () => {
                             fullWidth
                             variant="outlined"
                             error={!!errors.name}
-                            helperText={(errors.name?.message as string) || ''}
+                            helperText={errors.name?.message as string}
                           />
                         )}
                       />
@@ -332,7 +396,7 @@ const RecordDetailPage: React.FC = () => {
                     )}
                   </Grid>
 
-                  {/* Дата создания */}
+                  {/* Информация о создании */}
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       label="Дата создания"
@@ -343,11 +407,10 @@ const RecordDetailPage: React.FC = () => {
                     />
                   </Grid>
 
-                  {/* Владелец */}
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       label="Владелец"
-                      value={record.owner?.fullName || record.owner?.username || 'Неизвестно'}
+                      value={record.owner?.username || record.owner?.fullName || 'Неизвестно'}
                       fullWidth
                       disabled
                       variant="outlined"
@@ -355,15 +418,15 @@ const RecordDetailPage: React.FC = () => {
                   </Grid>
                 </Grid>
 
-                {/* Кастомные поля */}
-                {customFields.length > 0 && (
+                {/* Динамические поля */}
+                {fields.length > 0 && (
                   <>
-                    <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
+                    <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
                       Дополнительные поля
                     </Typography>
                     
                     <Grid container spacing={2}>
-                      {customFields.map((field: any) => {
+                      {fields.map((field: any) => {
                         const fieldValue = record.dynamicData?.[field.id];
                         
                         return (
@@ -462,6 +525,7 @@ const RecordDetailPage: React.FC = () => {
                       variant="outlined"
                       startIcon={<CancelIcon />}
                       onClick={handleCancel}
+                      disabled={updateMutation.isPending}
                     >
                       Отмена
                     </Button>
@@ -471,7 +535,7 @@ const RecordDetailPage: React.FC = () => {
             </Card>
           </Grid>
 
-          {/* Штрихкод и действия */}
+          {/* Боковая панель */}
           <Grid size={{ xs: 12, md: 4 }}>
             <Card>
               <CardContent>
@@ -483,13 +547,13 @@ const RecordDetailPage: React.FC = () => {
                   <Box sx={{ textAlign: 'center', mb: 2 }}>
                     <img 
                       src={barcodeDataUrl} 
-                      alt="Barcode" 
+                      alt="Штрихкод" 
                       style={{ maxWidth: '100%', height: 'auto' }}
                     />
                   </Box>
                 )}
-                
-                <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
+
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <Button
                     variant="outlined"
                     startIcon={<PrintIcon />}
@@ -499,53 +563,40 @@ const RecordDetailPage: React.FC = () => {
                     Печать
                   </Button>
                   
-                  <Tooltip title="Отправить по Bluetooth (требует поддержки браузера)">
-                    <Button
-                      variant="outlined"
-                      startIcon={<BluetoothIcon />}
-                      onClick={handleBluetoothPrint}
-                      fullWidth
-                    >
-                      Bluetooth
-                    </Button>
-                  </Tooltip>
+                  <Button
+                    variant="outlined"
+                    startIcon={<BluetoothIcon />}
+                    onClick={handleBluetoothPrint}
+                    fullWidth
+                  >
+                    Bluetooth печать
+                  </Button>
                 </Box>
 
-                {/* Информация о правах */}
-                <Box sx={{ mt: 3 }}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Права доступа
-                  </Typography>
-                  <Chip 
-                    label={canEdit ? 'Можно редактировать' : 'Только просмотр'} 
-                    color={canEdit ? 'success' : 'default'}
-                    size="small"
-                  />
-                  {isOwner && (
-                    <Chip 
-                      label="Владелец" 
-                      color="primary" 
-                      size="small" 
-                      sx={{ ml: 1 }}
-                    />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                  <strong>Права доступа:</strong><br />
+                  {canEdit ? (
+                    <Chip label="Редактирование разрешено" color="success" size="small" />
+                  ) : (
+                    <Chip label="Только просмотр" color="default" size="small" />
                   )}
-                </Box>
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
       </form>
 
-      {/* Показываем ошибки мутации */}
-      {updateMutation.error && (
+      {/* Уведомления об ошибках */}
+      {updateMutation.isError && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          Ошибка при сохранении: {updateMutation.error.message}
+          Ошибка при сохранении записи. Попробуйте снова.
         </Alert>
       )}
-      
-      {deleteMutation.error && (
+
+      {deleteMutation.isError && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          Ошибка при удалении: {deleteMutation.error.message}
+          Ошибка при удалении записи. Попробуйте снова.
         </Alert>
       )}
     </Box>

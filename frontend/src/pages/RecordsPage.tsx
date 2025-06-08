@@ -50,6 +50,7 @@ import { recordsApi, fieldsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { ExportDialog } from '../components/Records/ExportDialog';
 import { ConfirmDialog } from '../components/Common/ConfirmDialog';
+import CreateRecordDialog from '../components/Records/CreateRecordDialog';
 
 export const RecordsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -70,18 +71,40 @@ export const RecordsPage: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  
+  // НОВОЕ: Состояние для модального окна создания записи
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   // Загрузка данных - добавляем refetchOnWindowFocus и правильный ключ кеша
   const { data: recordsData = { data: [] }, isLoading: recordsLoading, error: recordsError } = useQuery({
     queryKey: ['records', showAllRecords], // Упрощаем ключ кеша
     queryFn: () => {
-      console.log('Загружаем записи с showAll:', showAllRecords);
+      console.log('📡 Загружаем записи с showAll:', showAllRecords);
       return recordsApi.getAll({ showAll: showAllRecords });
     },
-    staleTime: 0, // Не кешируем данные
-    refetchOnWindowFocus: false,
+    staleTime: 0, // Всегда обновляем данные
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
+  // Логирование данных записей
+  React.useEffect(() => {
+    if (recordsData?.data && !recordsLoading) {
+      console.log('✅ Записи загружены успешно:');
+      console.log('📊 Количество записей:', recordsData.data.length);
+      if (recordsData.data.length > 0) {
+        console.log('📝 Первая запись:', recordsData.data[0]);
+        console.log('🆔 Поля ID первой записи:');
+        console.log('   - id:', recordsData.data[0].id);
+        console.log('   - documentId:', recordsData.data[0].documentId);
+      }
+    }
+    if (recordsError) {
+      console.error('❌ Ошибка загрузки записей:', recordsError);
+    }
+  }, [recordsData, recordsLoading, recordsError]);
+
+  // Загрузка полей
   const { data: fieldsData = { data: [] } } = useQuery({
     queryKey: ['fields'],
     queryFn: () => fieldsApi.getAll(),
@@ -98,46 +121,25 @@ export const RecordsPage: React.FC = () => {
     },
   });
 
-  // Обработка фильтрации и сортировки (применяем только поиск и дополнительные фильтры)
-  // Фильтрация по владельцу происходит на бэкенде через параметр showAll
-  const filteredRecords = useMemo(() => {
-    if (!recordsData?.data) return [];
-    
-    let filtered = [...recordsData.data];
+  // НОВОЕ: Мутация для создания записи
+  const createMutation = useMutation({
+    mutationFn: (data: any) => recordsApi.create(data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      setCreateDialogOpen(false);
+      // Переходим к созданной записи
+      if (result?.data?.id) {
+        navigate(`/records/${result.data.id}`);
+      }
+    },
+    onError: (error) => {
+      console.error('Ошибка создания записи:', error);
+    },
+  });
 
-    // Применяем поиск
-    if (searchQuery) {
-      filtered = filtered.filter(record => {
-        const searchableText = JSON.stringify(record).toLowerCase();
-        return searchableText.includes(searchQuery.toLowerCase());
-      });
-    }
+  const records = recordsData?.data || [];
 
-    // Применяем дополнительные фильтры
-    if (activeFilters.length > 0) {
-      filtered = applyFiltersToData(filtered, activeFilters);
-    }
-
-    // Применяем сортировку
-    filtered.sort((a, b) => {
-      const aValue = a[orderBy];
-      const bValue = b[orderBy];
-      
-      if (aValue < bValue) return order === 'asc' ? -1 : 1;
-      if (aValue > bValue) return order === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return filtered;
-  }, [recordsData?.data, searchQuery, activeFilters, orderBy, order]);
-
-  // Пагинация
-  const paginatedRecords = useMemo(() => {
-    const startIndex = page * rowsPerPage;
-    return filteredRecords.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredRecords, page, rowsPerPage]);
-
-  // Обработчики событий
+  // Обработка пагинации
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
@@ -146,11 +148,13 @@ export const RecordsPage: React.FC = () => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
+
+  // Обработка очистки поиска
   const handleClearSearch = () => {
     setSearchQuery('');
-    setPage(0);
   };
 
+  // Обработка сортировки
   const handleSort = (property: string) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
@@ -169,7 +173,7 @@ export const RecordsPage: React.FC = () => {
 
   const handleEdit = () => {
     if (selectedRecord) {
-      navigate(`/records/${selectedRecord.id}/edit`);
+      navigate(`/records/${selectedRecord.id}`);
     }
     handleMenuClose();
   };
@@ -195,8 +199,35 @@ export const RecordsPage: React.FC = () => {
     console.log('Переключение showAll на:', checked);
     setShowAllRecords(checked);
     setPage(0); // Сбрасываем на первую страницу
+  };
+
+  // НОВОЕ: Обработчик создания записи
+  const handleCreateRecord = (data: any) => {
+    console.log('Создание записи с данными:', data);
+    createMutation.mutate(data);
+  };
+
+  // ИСПРАВЛЕНИЕ: Правильный обработчик клика по строке
+  const handleRowClick = (record: any) => {
+    // Подробное логирование для отладки
+    console.log('🖱️ Клик по строке записи:');
+    console.log('📋 Полные данные записи:', record);
+    console.log('🆔 record.id:', record.id);
+    console.log('📄 record.documentId:', record.documentId);
+    console.log('📦 record.inventoryNumber:', record.inventoryNumber);
     
- };
+    // Используем правильное поле ID (приоритет documentId, затем id)
+    const recordId = record.documentId || record.id;
+    console.log('🎯 Используемый ID для навигации:', recordId);
+    
+    if (recordId) {
+      console.log('✅ Переход к записи:', `/records/${recordId}`);
+      navigate(`/records/${recordId}`);
+    } else {
+      console.error('❌ ID записи не найден:', record);
+      alert('Ошибка: не удалось определить ID записи');
+    }
+  };
 
   const formatFieldValue = (value: any, fieldType: string) => {
     if (!value) return '';
@@ -217,6 +248,62 @@ export const RecordsPage: React.FC = () => {
         return String(value);
     }
   };
+
+  // Применение фильтров
+  const filteredRecords = useMemo(() => {
+    let filtered = records;
+
+    // Поиск
+    if (searchQuery) {
+      filtered = filtered.filter((record: any) => {
+        const searchLower = searchQuery.toLowerCase();
+        return (
+          record.inventoryNumber?.toLowerCase().includes(searchLower) ||
+          record.barcode?.toLowerCase().includes(searchLower) ||
+          record.name?.toLowerCase().includes(searchLower) ||
+          JSON.stringify(record.dynamicData || {}).toLowerCase().includes(searchLower)
+        );
+      });
+    }
+
+    // Применение фильтров
+    if (activeFilters.length > 0) {
+      filtered = applyFiltersToData(filtered, activeFilters);
+    }
+
+    return filtered;
+  }, [records, searchQuery, activeFilters]);
+
+  // Сортировка
+  const sortedRecords = useMemo(() => {
+    return [...filteredRecords].sort((a: any, b: any) => {
+      let aVal = a[orderBy];
+      let bVal = b[orderBy];
+
+      // Обработка вложенных полей
+      if (orderBy.includes('.')) {
+        const keys = orderBy.split('.');
+        aVal = keys.reduce((obj, key) => obj?.[key], a);
+        bVal = keys.reduce((obj, key) => obj?.[key], b);
+      }
+
+      // Обработка null/undefined значений
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return order === 'asc' ? -1 : 1;
+      if (bVal == null) return order === 'asc' ? 1 : -1;
+
+      // Сравнение
+      if (aVal < bVal) return order === 'asc' ? -1 : 1;
+      if (aVal > bVal) return order === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredRecords, orderBy, order]);
+
+  // Пагинация
+  const paginatedRecords = useMemo(() => {
+    const start = page * rowsPerPage;
+    return sortedRecords.slice(start, start + rowsPerPage);
+  }, [sortedRecords, page, rowsPerPage]);
 
   if (recordsLoading) {
     return (
@@ -264,10 +351,11 @@ export const RecordsPage: React.FC = () => {
             Экспорт
           </Button>
           
+          {/* ИСПРАВЛЕНИЕ: Правильный обработчик кнопки "Добавить" */}
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/records/create')}
+            onClick={() => setCreateDialogOpen(true)}
           >
             Добавить
           </Button>
@@ -314,38 +402,34 @@ export const RecordsPage: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <PersonIcon fontSize="small" />
                   <Typography variant="body2">
-                    {showAllRecords ? 'Показывать все записи' : 'Показывать только мои записи'}
+                    {showAllRecords ? 'Все записи' : 'Только мои'}
                   </Typography>
                 </Box>
               }
             />
-          </Box>
 
-          {/* Активные фильтры */}
-          {activeFilters.length > 0 && (
-            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                Активные фильтры:
-              </Typography>
-              {activeFilters.map((filter, index) => (
-                <Chip
-                  key={index}
-                  label={`${filter.field}: ${filter.operator} ${filter.value}`}
-                  onDelete={() => {
-                    const newFilters = activeFilters.filter((_, i) => i !== index);
-                    setActiveFilters(newFilters);
-                  }}
-                  size="small"
-                />
-              ))}
-            </Box>
-          )}
+            {/* Активные фильтры */}
+            {activeFilters.length > 0 && (
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {activeFilters.map((filter) => (
+                  <Chip
+                    key={filter.id}
+                    label={`${filter.field}: ${filter.value}`}
+                    size="small"
+                    onDelete={() => {
+                      setActiveFilters(prev => prev.filter(f => f.id !== filter.id));
+                    }}
+                  />
+                ))}
+              </Box>
+            )}
+          </Box>
         </CardContent>
       </Card>
 
       {/* Таблица записей */}
       <Card>
-        <CardContent sx={{ p: 0 }}>
+        <CardContent>
           <TableContainer>
             <Table>
               <TableHead>
@@ -370,7 +454,7 @@ export const RecordsPage: React.FC = () => {
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Динамические поля */}
+                  {/* Первые 3 динамических поля */}
                   {fieldsData?.data?.slice(0, 3).map((field: any) => (
                     <TableCell key={field.id}>
                       <TableSortLabel
@@ -416,9 +500,9 @@ export const RecordsPage: React.FC = () => {
                     
                     return (
                       <TableRow
-                        key={record.id}
+                        key={record.id || record.documentId}
                         hover
-                        onClick={() => navigate(`/records/${record.id}`)}
+                        onClick={() => handleRowClick(record)}
                         sx={{ cursor: 'pointer' }}
                       >
                         <TableCell>
@@ -432,7 +516,6 @@ export const RecordsPage: React.FC = () => {
                         {/* Динамические поля */}
                         {fieldsData?.data?.slice(0, 3).map((field: any) => {
                           const value = record.dynamicData?.[field.id];
-                          
                           return (
                             <TableCell key={field.id}>
                               {formatFieldValue(value, field.fieldType)}
@@ -441,19 +524,14 @@ export const RecordsPage: React.FC = () => {
                         })}
 
                         <TableCell>
-                          {format(
-                            new Date(record.createdAt),
-                            'dd.MM.yyyy HH:mm',
-                            { locale: ru }
-                          )}
+                          {record.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : ''}
                         </TableCell>
 
-                        {/* Столбец "Владелец" всегда виден */}
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <PersonIcon fontSize="small" color="action" />
                             <Typography variant="body2">
-                              {ownerData?.fullName || ownerData?.username || 'Неизвестно'}
+                              {ownerData?.username || ownerData?.fullName || 'Неизвестно'}
                             </Typography>
                           </Box>
                         </TableCell>
@@ -509,6 +587,16 @@ export const RecordsPage: React.FC = () => {
           Удалить
         </MenuItem>
       </Menu>
+
+      {/* НОВОЕ: Диалог создания записи */}
+      <CreateRecordDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        fields={fieldsData?.data || []}
+        onSubmit={handleCreateRecord}
+        isLoading={createMutation.isPending}
+        error={createMutation.isError ? 'Ошибка создания записи. Проверьте заполнение полей и попробуйте снова.' : null}
+      />
 
       {/* Диалог фильтров */}
       <AdvancedFilters

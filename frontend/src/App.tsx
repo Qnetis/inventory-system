@@ -1,7 +1,8 @@
+// frontend/src/App.tsx
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { ruRU } from '@mui/material/locale';
 
 import Layout from './components/Layout/Layout';
@@ -14,8 +15,8 @@ import { AuthProvider } from './contexts/AuthContext';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
       retry: 1,
+      refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000, // 5 минут
     },
   },
@@ -26,73 +27,15 @@ const theme = createTheme({
     primary: {
       main: '#1976d2',
     },
-    background: {
-      default: '#fafafa',
+    secondary: {
+      main: '#dc004e',
     },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h1: {
-      fontSize: '2.5rem',
-      '@media (max-width:600px)': {
-        fontSize: '2rem',
-      },
-    },
-    h2: {
-      fontSize: '2rem',
-      '@media (max-width:600px)': {
-        fontSize: '1.75rem',
-      },
-    },
-    h3: {
-      fontSize: '1.75rem',
-      '@media (max-width:600px)': {
-        fontSize: '1.5rem',
-      },
-    },
-    h4: {
-      fontSize: '1.5rem',
-      '@media (max-width:600px)': {
-        fontSize: '1.25rem',
-      },
-    },
-    h5: {
-      fontSize: '1.25rem',
-      '@media (max-width:600px)': {
-        fontSize: '1.1rem',
-      },
-    },
-    h6: {
-      fontSize: '1.1rem',
-      '@media (max-width:600px)': {
-        fontSize: '1rem',
-      },
-    },
+    fontFamily: 'Roboto, Arial, sans-serif',
   },
   components: {
     MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          borderRadius: 8,
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-        },
-      },
-    },
-    MuiTextField: {
       defaultProps: {
         variant: 'outlined',
       },
@@ -126,8 +69,14 @@ function App() {
               <Route path="/" element={<Layout />}>
                 <Route index element={<Navigate to="/records" />} />
                 <Route path="records" element={<RecordsPage />} />
+                {/* ИСПРАВЛЕНИЕ: Добавляем обработку для недопустимых ID */}
+                <Route path="records/create" element={<Navigate to="/records" replace />} />
+                <Route path="records/new" element={<Navigate to="/records" replace />} />
+                <Route path="records/add" element={<Navigate to="/records" replace />} />
                 <Route path="records/:id" element={<RecordDetailPage />} />
                 <Route path="admin" element={<AdminPage />} />
+                {/* Обработка неизвестных роутов */}
+                <Route path="*" element={<Navigate to="/records" replace />} />
               </Route>
             </Routes>
           </BrowserRouter>

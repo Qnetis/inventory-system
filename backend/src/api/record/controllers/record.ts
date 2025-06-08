@@ -109,53 +109,113 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     }
   },
   
+  // ИСПРАВЛЕНИЕ: Полностью переписанный findOne с правильным логированием
   async findOne(ctx) {
     try {
-      const { id: documentId } = ctx.params;
+      const { id: requestedId } = ctx.params;
       const user = ctx.state.user;
       
-      console.log('🔍 FindOne called with documentId:', documentId);
+      console.log('🔍 FindOne called with ID:', requestedId);
       console.log('👤 User:', user.username, 'Role:', user.role?.type);
       
-      // Пытаемся найти по documentId
-      let record;
+      let record = null;
+      let searchMethod = '';
+      
+      // Сначала пытаемся найти по documentId
       try {
-        console.log('🎯 Пытаемся найти по documentId:', documentId);
+        console.log('🎯 Пытаемся найти по documentId:', requestedId);
         record = await strapi.documents('api::record.record').findOne({
-          documentId: documentId,
+          documentId: requestedId,
           populate: ['owner'],
           status: 'published'
         });
-        console.log('✅ Запись найдена по documentId:', !!record);
+        
+        if (record) {
+          searchMethod = 'documentId';
+          console.log('✅ Запись найдена по documentId. ID:', record.id, 'DocumentId:', record.documentId);
+        } else {
+          console.log('❌ Запись не найдена по documentId');
+        }
       } catch (error) {
-        console.log('❌ Document not found by documentId, trying by id...');
-        console.log('Error details:', error.message);
-        
-        // Если не найдено по documentId, пробуем найти по id
-        const records = await strapi.documents('api::record.record').findMany({
-          filters: { id: documentId },
-          populate: ['owner'],
-          status: 'published'
-        });
-        
-        console.log('🔍 Поиск по id результат:', records.length, 'записей');
-        if (records.length > 0) {
-          record = records[0];
-          console.log('✅ Запись найдена по id:', record.id, 'documentId:', record.documentId);
+        console.log('💥 Ошибка поиска по documentId:', error.message);
+      }
+      
+      // Если не найдено по documentId, пробуем найти по обычному id
+      if (!record) {
+        try {
+          console.log('🔄 Пытаемся найти по обычному id:', requestedId);
+          const records = await strapi.documents('api::record.record').findMany({
+            filters: { id: requestedId },
+            populate: ['owner'],
+            status: 'published'
+          });
+          
+          console.log('🔍 Поиск по id результат:', records.length, 'записей');
+          if (records.length > 0) {
+            record = records[0];
+            searchMethod = 'id';
+            console.log('✅ Запись найдена по id. ID:', record.id, 'DocumentId:', record.documentId);
+          } else {
+            console.log('❌ Запись не найдена по id');
+          }
+        } catch (error) {
+          console.log('💥 Ошибка поиска по id:', error.message);
+        }
+      }
+      
+      // Если запись все еще не найдена, пытаемся найти по любому полю
+      if (!record) {
+        try {
+          console.log('🔄 Последняя попытка: поиск среди всех записей...');
+          const allRecords = await strapi.documents('api::record.record').findMany({
+            populate: ['owner'],
+            status: 'published'
+          });
+          
+          console.log('📋 Всего записей в БД:', allRecords.length);
+          if (allRecords.length > 0) {
+            console.log('📝 Первые 3 записи:');
+            allRecords.slice(0, 3).forEach((rec, index) => {
+              console.log(`   ${index + 1}. ID: ${rec.id}, DocumentId: ${rec.documentId}, Inventory: ${rec.inventoryNumber}`);
+            });
+          }
+          
+          // Пытаемся найти точно по ID
+          const foundRecord = allRecords.find(rec => 
+            rec.id == requestedId || 
+            rec.documentId == requestedId
+          );
+          
+          if (foundRecord) {
+            record = foundRecord;
+            searchMethod = 'brute_force';
+            console.log('✅ Запись найдена перебором! ID:', record.id, 'DocumentId:', record.documentId);
+          } else {
+            console.log('❌ Запись не найдена даже перебором');
+          }
+        } catch (error) {
+          console.log('💥 Ошибка поиска перебором:', error.message);
         }
       }
       
       if (!record) {
-        console.log('❌ Record not found with any method');
+        console.log('🚫 ИТОГ: Запись с ID', requestedId, 'не найдена никаким способом');
         return ctx.notFound('Record not found');
       }
       
+      console.log('🎉 ИТОГ: Запись найдена методом', searchMethod);
+      
       const ownerId = record.owner?.id;
+      console.log('👤 Владелец записи ID:', ownerId);
+      console.log('👤 Текущий пользователь ID:', user.id);
       
       // Проверяем права доступа
       if (user.role?.type !== 'admin' && ownerId !== user.id) {
+        console.log('🚫 Отказано в доступе: пользователь не админ и не владелец');
         return ctx.forbidden('Access denied');
       }
+      
+      console.log('✅ Доступ разрешен');
       
       return {
         data: {
@@ -166,7 +226,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
         meta: {}
       };
     } catch (error) {
-      console.error('FindOne error:', error);
+      console.error('💥 FindOne general error:', error);
       ctx.throw(500, error.message);
     }
   },
@@ -344,76 +404,70 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       switch (period) {
         case 'weekly':
           const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
-          startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+          startDate = new Date(now.setDate(diff));
           startDate.setHours(0, 0, 0, 0);
           break;
         case 'monthly':
           startDate = new Date(now.getFullYear(), now.getMonth(), 1);
           break;
-        default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        default: // daily
+          startDate = new Date();
+          startDate.setHours(0, 0, 0, 0);
       }
-      
-      // Получаем записи за период с использованием Document Service
+
       const records = await strapi.documents('api::record.record').findMany({
         filters: {
           owner: user.id,
-          createdAt: { 
-            $gte: startDate.toISOString() 
-          }
-        },
-        populate: ['owner'],
-        status: 'published'
-      });
-      
-      // Получаем денежные поля
-      const moneyFields = await strapi.documents('api::custom-field.custom-field').findMany({
-        filters: { 
-          fieldType: 'MONEY'
+          createdAt: {
+            $gte: startDate.toISOString(),
+          },
         },
         status: 'published'
       });
-      
+
+      // Получаем пользовательские поля для расчета сумм
+      const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
+        filters: { fieldType: 'MONEY' },
+        status: 'published'
+      });
+
       let totalMoney = 0;
-      
-      // Считаем общую сумму по денежным полям
-      for (const record of records) {
-        if (record.dynamicData && moneyFields.length > 0) {
-          for (const field of moneyFields) {
+      records.forEach((record: any) => {
+        if (record.dynamicData) {
+          customFields.forEach((field: any) => {
             const value = record.dynamicData[field.id];
-            if (value && !isNaN(value)) {
-              totalMoney += Number(value);
+            if (value && !isNaN(parseFloat(value))) {
+              totalMoney += parseFloat(value);
             }
-          }
+          });
         }
-      }
-      
-      ctx.body = {
-        user: user.fullName || user.username,
-        count: records.length,
-        totalMoney: totalMoney
+      });
+
+      return {
+        data: {
+          user: user.username || user.email,
+          count: records.length,
+          totalMoney,
+          period,
+        },
+        meta: {}
       };
-      
+
     } catch (error) {
-      console.error('User statistics error:', error);
-      ctx.throw(500, error.message || 'Error generating user statistics');
+      console.error('Get user statistics error:', error);
+      ctx.throw(500, error.message);
     }
   },
 
-  // Общий метод статистики (алиас для getAllUsersStatistics)
-  async statistics(ctx) {
-    return this.getAllUsersStatistics(ctx);
-  },
-
-  // Статистика для всех пользователей (только админы)
+  // Статистика для всех пользователей (только для админов)
   async getAllUsersStatistics(ctx) {
     try {
       const user = ctx.state.user;
       
       if (user.role?.type !== 'admin') {
-        return ctx.forbidden('Only administrators can access this endpoint');
+        return ctx.forbidden('Access denied. Admin role required.');
       }
-      
+
       const { period = 'daily' } = ctx.query;
       
       const now = new Date();
@@ -422,120 +476,143 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       switch (period) {
         case 'weekly':
           const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
-          startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+          startDate = new Date(now.setDate(diff));
           startDate.setHours(0, 0, 0, 0);
           break;
         case 'monthly':
           startDate = new Date(now.getFullYear(), now.getMonth(), 1);
           break;
         default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          startDate = new Date();
+          startDate.setHours(0, 0, 0, 0);
       }
-      
-      // Получаем записи за период с использованием Document Service
+
       const records = await strapi.documents('api::record.record').findMany({
         filters: {
-          createdAt: { 
-            $gte: startDate.toISOString() 
-          }
+          createdAt: {
+            $gte: startDate.toISOString(),
+          },
         },
         populate: ['owner'],
         status: 'published'
       });
-      
-      // Получаем денежные поля
-      const moneyFields = await strapi.documents('api::custom-field.custom-field').findMany({
-        filters: { 
-          fieldType: 'MONEY'
-        },
+
+      const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
+        filters: { fieldType: 'MONEY' },
         status: 'published'
       });
-      
-      // Группируем по пользователям
+
       const userStats: { [key: string]: UserStatistic } = {};
-      
-      for (const record of records) {
+
+      records.forEach((record: any) => {
         const userId = record.owner?.id;
-        const userName = record.owner?.fullName || record.owner?.username || 'Unknown';
-        
-        if (!userId) continue;
+        const userName = record.owner?.username || record.owner?.email || 'Unknown';
         
         if (!userStats[userId]) {
           userStats[userId] = {
             user: userName,
             count: 0,
-            totalMoney: 0
+            totalMoney: 0,
           };
         }
         
-        userStats[userId].count++;
+        userStats[userId].count += 1;
         
-        // Считаем деньги
-        if (record.dynamicData && moneyFields.length > 0) {
-          for (const field of moneyFields) {
+        if (record.dynamicData) {
+          customFields.forEach((field: any) => {
             const value = record.dynamicData[field.id];
-            if (value && !isNaN(value)) {
-              userStats[userId].totalMoney += Number(value);
+            if (value && !isNaN(parseFloat(value))) {
+              userStats[userId].totalMoney += parseFloat(value);
             }
-          }
+          });
         }
-      }
-      
-      // Возвращаем массив статистики
-      const stats: UserStatistic[] = Object.values(userStats);
-      stats.sort((a: UserStatistic, b: UserStatistic) => b.count - a.count);
-      
-      ctx.body = stats;
-      
+      });
+
+      return {
+        data: Object.values(userStats),
+        meta: { period }
+      };
+
     } catch (error) {
-      console.error('Statistics error:', error);
-      ctx.throw(500, error.message || 'Error generating statistics');
+      console.error('Get all users statistics error:', error);
+      ctx.throw(500, error.message);
     }
   },
-  
+
+  // Экспорт данных
   async export(ctx) {
     try {
       const user = ctx.state.user;
-      const { format = 'csv', fields = [] } = ctx.request.body;
-      const { showAll } = ctx.query;
+      const { format = 'csv', fields: selectedFields, showAll } = ctx.request.body;
       
-      // ИСПРАВЛЕНИЕ: Правильно парсим boolean из строки
-      const showAllBool = showAll === 'true' || showAll === true;
+      console.log('Export request:', { format, selectedFields, showAll });
       
-      console.log('Export - User:', user.username, 'Role:', user.role?.type, 'showAll:', showAll, 'parsed:', showAllBool);
-      
-      // Определяем фильтры на основе прав пользователя
       let filters: any = {};
       
-      // ИСПРАВЛЕНИЕ: Применяем ту же логику что и в find - любой пользователь может видеть все записи
-      if (showAllBool) {
-        // Если showAll = true, экспортируем все записи (без фильтра) для любого пользователя
-        console.log('Export: Пользователь просит все записи, фильтр не применяем');
-      } else {
-        // Если showAll = false, экспортируем только записи текущего пользователя
+      if (!showAll || user.role?.type !== 'admin') {
         filters.owner = user.id;
-        console.log('Export: Пользователь просит только свои записи, применяем фильтр по owner:', user.id);
       }
       
-      // Получаем все записи с использованием Document Service
       const records = await strapi.documents('api::record.record').findMany({
         filters,
         populate: ['owner'],
         status: 'published'
       });
       
-      // Здесь должна быть логика экспорта в CSV/Excel
-      // Пока возвращаем простой ответ
-      ctx.body = {
-        message: 'Export functionality to be implemented',
-        recordsCount: records.length,
-        format,
-        fields
-      };
+      const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
+        status: 'published'
+      });
+      
+      const headers = ['inventoryNumber', 'barcode', 'name', 'createdAt', 'owner'];
+      
+      if (selectedFields && selectedFields.length > 0) {
+        selectedFields.forEach((fieldId: string) => {
+          const field = customFields.find((f: any) => f.id === fieldId);
+          if (field) {
+            headers.push(field.name);
+          }
+        });
+      }
+      
+      let output = '';
+      
+      if (format === 'csv') {
+        output = headers.join(',') + '\n';
+        
+        records.forEach((record: any) => {
+          const row = [
+            record.inventoryNumber || '',
+            record.barcode || '',
+            record.name || '',
+            record.createdAt || '',
+            record.owner?.username || record.owner?.email || ''
+          ];
+          
+          if (selectedFields && selectedFields.length > 0) {
+            selectedFields.forEach((fieldId: string) => {
+              const value = record.dynamicData?.[fieldId] || '';
+              row.push(String(value));
+            });
+          }
+          
+          output += row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',') + '\n';
+        });
+        
+        ctx.set('Content-Type', 'text/csv');
+        ctx.set('Content-Disposition', 'attachment; filename="records.csv"');
+      }
+      
+      ctx.body = output;
       
     } catch (error) {
       console.error('Export error:', error);
-      ctx.throw(500, error.message || 'Error exporting data');
+      ctx.throw(500, error.message);
     }
-  }
+  },
+
+  // ДОБАВЛЕНО: Общий метод статистики (алиас для getAllUsersStatistics)
+  async statistics(ctx) {
+    return this.getAllUsersStatistics(ctx);
+  },
+
 }));

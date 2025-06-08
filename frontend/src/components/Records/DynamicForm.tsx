@@ -1,7 +1,7 @@
 // src/components/Records/DynamicForm.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React from 'react';
+import React, { useImperativeHandle } from 'react';
 import {
   TextField,
   Select,
@@ -25,14 +25,23 @@ interface DynamicFormProps {
   onSubmit: (data: any) => void;
   defaultValues?: any;
   showNameField?: boolean;
+  submitButtonText?: string;
+  showSubmitButton?: boolean; // НОВОЕ: позволяет скрыть кнопку отправки
 }
 
-const DynamicForm: React.FC<DynamicFormProps> = ({
+// ИСПРАВЛЕНИЕ: Добавляем типы для ref
+export interface DynamicFormRef {
+  triggerSubmit: () => void;
+}
+
+const DynamicForm = React.forwardRef<DynamicFormRef, DynamicFormProps>(({
   fields,
   onSubmit,
   defaultValues,
   showNameField = false,
-}) => {
+  submitButtonText = 'Сохранить',
+  showSubmitButton = true, // По умолчанию показываем
+}, ref) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { control, handleSubmit, formState: { errors } } = useForm({
@@ -43,6 +52,38 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   });
 
   console.log('DynamicForm fields:', fields);
+
+  const onFormSubmit = (data: any) => {
+    console.log('Form data before submit:', data);
+    
+    const dynamicData: any = {};
+    const result: any = {};
+    
+    // Добавляем имя записи если есть
+    if (showNameField && data.name) {
+      result.name = data.name;
+    }
+    
+    // Формируем динамические данные
+    fields.forEach((field) => {
+      const value = data[field.id];
+      if (value !== undefined && value !== '') {
+        dynamicData[field.id] = value;
+      }
+    });
+
+    result.dynamicData = dynamicData;
+
+    console.log('Data to submit:', result);
+    onSubmit(result);
+  };
+
+  // ИСПРАВЛЕНИЕ: Добавляем возможность программно запускать отправку
+  useImperativeHandle(ref, () => ({
+    triggerSubmit: () => {
+      handleSubmit(onFormSubmit)();
+    }
+  }));
 
   const renderField = (field: any) => {
     const fieldData = field.attributes || field;
@@ -64,6 +105,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                 onChange={onChange}
                 error={!!errors[fieldName]}
                 helperText={errors[fieldName] && 'Это поле обязательно'}
+                required={fieldData.isRequired}
               />
             )}
           />
@@ -85,6 +127,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                 onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
                 error={!!errors[fieldName]}
                 helperText={errors[fieldName] && 'Это поле обязательно'}
+                required={fieldData.isRequired}
               />
             )}
           />
@@ -104,11 +147,12 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                 label={fieldData.name}
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value ? Number(e.target.value) : '')}
+                error={!!errors[fieldName]}
+                helperText={errors[fieldName] && 'Это поле обязательно'}
+                required={fieldData.isRequired}
                 InputProps={{
                   endAdornment: <InputAdornment position="end">₽</InputAdornment>,
                 }}
-                error={!!errors[fieldName]}
-                helperText={errors[fieldName] && 'Это поле обязательно'}
               />
             )}
           />
@@ -125,6 +169,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                 fullWidth 
                 size={isMobile ? "small" : "medium"}
                 error={!!errors[fieldName]}
+                required={fieldData.isRequired}
               >
                 <InputLabel>{fieldData.name}</InputLabel>
                 <Select
@@ -132,9 +177,6 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
                   onChange={onChange}
                   label={fieldData.name}
                 >
-                  <MenuItem value="">
-                    <em>Не выбрано</em>
-                  </MenuItem>
                   {fieldData.options?.map((option: string) => (
                     <MenuItem key={option} value={option}>
                       {option}
@@ -174,31 +216,6 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     }
   };
 
-  const onFormSubmit = (data: any) => {
-    console.log('Form data before submit:', data);
-    
-    const dynamicData: any = {};
-    const result: any = {};
-    
-    // Добавляем имя записи если есть
-    if (showNameField && data.name) {
-      result.name = data.name;
-    }
-    
-    // Формируем динамические данные
-    fields.forEach((field) => {
-      const value = data[field.id];
-      if (value !== undefined && value !== '') {
-        dynamicData[field.id] = value;
-      }
-    });
-
-    result.dynamicData = dynamicData;
-
-    console.log('Data to submit:', result);
-    onSubmit(result);
-  };
-
   if (!fields || fields.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -210,24 +227,26 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   }
 
   return (
-    <Box component="form" onSubmit={handleSubmit(onFormSubmit)}>
+    <Box 
+      component="form" 
+      onSubmit={handleSubmit(onFormSubmit)}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+    >
       {showNameField && (
-        <Box sx={{ mb: 2 }}>
-          <Controller
-            name="name"
-            control={control}
-            render={({ field: { onChange, value } }) => (
-              <TextField
-                fullWidth
-                size={isMobile ? "small" : "medium"}
-                label="Название записи (необязательно)"
-                value={value || ''}
-                onChange={onChange}
-                helperText="Если не указано, будет сгенерировано автоматически"
-              />
-            )}
-          />
-        </Box>
+        <Controller
+          name="name"
+          control={control}
+          render={({ field: { onChange, value } }) => (
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Название записи (необязательно)"
+              value={value || ''}
+              onChange={onChange}
+              helperText="Если не указано, будет сгенерировано автоматически"
+            />
+          )}
+        />
       )}
 
       {fields
@@ -237,22 +256,28 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
           return aOrder - bOrder;
         })
         .map((field) => (
-          <Box key={field.id} sx={{ mt: 2 }}>
+          <Box key={field.id}>
             {renderField(field)}
           </Box>
         ))}
 
-      <Button
-        type="submit"
-        variant="contained"
-        fullWidth
-        size={isMobile ? "large" : "large"}
-        sx={{ mt: 3, py: isMobile ? 1.5 : 1 }}
-      >
-        Сохранить
-      </Button>
+      {/* ИЗМЕНЕНИЕ: Кнопка отправки теперь опциональна */}
+      {showSubmitButton && (
+        <Button
+          type="submit"
+          variant="contained"
+          fullWidth
+          size={isMobile ? "large" : "large"}
+          sx={{ mt: 1, py: isMobile ? 1.5 : 1 }}
+        >
+          {submitButtonText}
+        </Button>
+      )}
     </Box>
   );
-};
+});
+
+// ИСПРАВЛЕНИЕ: Добавляем displayName для отладки
+DynamicForm.displayName = 'DynamicForm';
 
 export default DynamicForm;
