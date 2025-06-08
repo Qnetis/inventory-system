@@ -17,8 +17,8 @@ import {
   Alert,
   Card,
   CardContent,
-  Grid,
   Chip,
+  Stack,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -31,17 +31,23 @@ import { api } from '../../services/api';
 const Statistics: React.FC = () => {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
-  const { data: stats = [], isLoading, error, refetch } = useQuery({
+  // ИСПРАВЛЕНИЕ: Правильно обрабатываем ответ API
+  const { data: statisticsResponse, isLoading, error, refetch } = useQuery({
     queryKey: ['statistics', period],
     queryFn: async () => {
       console.log('Fetching statistics for period:', period);
-      const { data } = await api.get(`/api/records/statistics?period=${period}`);
-      console.log('Statistics response:', data);
-      return data || [];
+      const response = await api.get(`/api/records/statistics?period=${period}`);
+      console.log('Statistics API response:', response.data);
+      return response.data;
     },
     retry: 2,
     refetchOnWindowFocus: false,
   });
+
+  // ИСПРАВЛЕНИЕ: Извлекаем данные из правильного места
+  const stats = statisticsResponse?.data || [];
+  console.log('Processed stats:', stats);
+  console.log('Is stats an array?', Array.isArray(stats));
 
   const periodLabels = {
     daily: 'за сегодня',
@@ -55,10 +61,10 @@ const Statistics: React.FC = () => {
     monthly: 'За месяц',
   };
 
-  // Подсчитываем общую статистику
-  const totalRecords = stats.reduce((sum: number, stat: any) => sum + (stat.count || 0), 0);
-  const totalMoney = stats.reduce((sum: number, stat: any) => sum + (stat.totalMoney || 0), 0);
-  const activeUsers = stats.length;
+  // ИСПРАВЛЕНИЕ: Проверяем, что stats - это массив перед использованием reduce
+  const totalRecords = Array.isArray(stats) ? stats.reduce((sum: number, stat: any) => sum + (stat.count || 0), 0) : 0;
+  const totalMoney = Array.isArray(stats) ? stats.reduce((sum: number, stat: any) => sum + (stat.totalMoney || 0), 0) : 0;
+  const activeUsers = Array.isArray(stats) ? stats.length : 0;
 
   if (error) {
     console.error('Statistics error:', error);
@@ -102,8 +108,12 @@ const Statistics: React.FC = () => {
       </Box>
 
       {/* Общая статистика */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={4}>
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        spacing={3} 
+        sx={{ mb: 3 }}
+      >
+        <Box sx={{ flex: 1 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -117,8 +127,8 @@ const Statistics: React.FC = () => {
               </Box>
             </CardContent>
           </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
+        </Box>
+        <Box sx={{ flex: 1 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -132,8 +142,8 @@ const Statistics: React.FC = () => {
               </Box>
             </CardContent>
           </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
+        </Box>
+        <Box sx={{ flex: 1 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -149,8 +159,8 @@ const Statistics: React.FC = () => {
               </Box>
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+        </Box>
+      </Stack>
 
       {/* Детальная таблица */}
       <Paper>
@@ -176,16 +186,24 @@ const Statistics: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {stats.length === 0 ? (
+                  {!Array.isArray(stats) || stats.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} align="center">
                         <Box py={4}>
                           <Typography variant="body1" color="text.secondary">
-                            Нет данных за выбранный период
+                            {!Array.isArray(stats) ? 'Ошибка формата данных' : 'Нет данных за выбранный период'}
                           </Typography>
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            Попробуйте выбрать другой период или проверьте, есть ли записи в системе
+                            {!Array.isArray(stats) 
+                              ? 'Обратитесь к администратору' 
+                              : 'Попробуйте выбрать другой период или проверьте, есть ли записи в системе'
+                            }
                           </Typography>
+                          {!Array.isArray(stats) && (
+                            <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                              Получен: {typeof stats} вместо массива
+                            </Typography>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -241,10 +259,23 @@ const Statistics: React.FC = () => {
       </Paper>
 
       {/* Дополнительная информация */}
-      {stats.length > 0 && (
+      {Array.isArray(stats) && stats.length > 0 && (
         <Box sx={{ mt: 2 }}>
           <Typography variant="caption" color="text.secondary">
             Последнее обновление: {new Date().toLocaleString('ru-RU')}
+          </Typography>
+        </Box>
+      )}
+
+      {/* ДОБАВЛЕНО: Отладочная информация (можно убрать в продакшене) */}
+      {import.meta.env.DEV && (
+        <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            Debug: Raw response type: {typeof statisticsResponse}, Array check: {Array.isArray(stats) ? 'true' : 'false'}
+          </Typography>
+          <br />
+          <Typography variant="caption" color="text.secondary">
+            Stats length: {Array.isArray(stats) ? stats.length : 'N/A'}
           </Typography>
         </Box>
       )}
