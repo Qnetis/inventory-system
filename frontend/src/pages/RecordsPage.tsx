@@ -190,6 +190,8 @@ export const RecordsPage: React.FC = () => {
   };
 
   const handleApplyFilters = (filters: any[]) => {
+      console.log('🔍 RecordsPage - Применяем фильтры:', filters);
+
     setActiveFilters(filters);
     setPage(0);
   };
@@ -228,51 +230,64 @@ export const RecordsPage: React.FC = () => {
       alert('Ошибка: не удалось определить ID записи');
     }
   };
+// Обновленная функция formatFieldValue с логированием:
+const formatFieldValue = (value: any, fieldType: string, fieldName?: string) => {
+  if (fieldName) {
+    console.log('🔍 formatFieldValue:', fieldName, '=', value, 'type:', fieldType);
+  }
+  
+  if (value === null || value === undefined) return '-';
+  
+  switch (fieldType) {
+    case 'MONEY':
+      return `${Number(value).toLocaleString('ru-RU')} ₽`;
+    case 'CHECKBOX':
+      return value ? 'Да' : 'Нет';
+    case 'DATE':
+      return format(new Date(value), 'dd.MM.yyyy', { locale: ru });
+    default:
+      return String(value);
+  }
+};
+const filteredRecords = useMemo(() => {
+  console.log('🔍 filteredRecords мемо - исходные записи:', records.length);
+  console.log('🔍 filteredRecords мемо - строка поиска:', searchQuery);
+  console.log('🔍 filteredRecords мемо - активные фильтры:', activeFilters);
+  
+  let filtered = records;
 
-  const formatFieldValue = (value: any, fieldType: string) => {
-    if (!value) return '';
-    
-    switch (fieldType) {
-      case 'MONEY':
-        return new Intl.NumberFormat('ru-RU', {
-          style: 'currency',
-          currency: 'RUB'
-        }).format(parseFloat(value));
-      case 'NUMBER':
-        return new Intl.NumberFormat('ru-RU').format(parseFloat(value));
-      case 'CHECKBOX':
-        return value ? 'Да' : 'Нет';
-      case 'DATE':
-        return format(new Date(value), 'dd.MM.yyyy', { locale: ru });
-      default:
-        return String(value);
-    }
-  };
+  // Поиск
+  if (searchQuery) {
+    filtered = filtered.filter((record: any) => {
+      const searchLower = searchQuery.toLowerCase();
+      const nameMatch = record.name?.toLowerCase().includes(searchLower);
+      const barcodeMatch = record.barcode?.toLowerCase().includes(searchLower);
+      const dynamicMatch = JSON.stringify(record.dynamicData || {}).toLowerCase().includes(searchLower);
+      
+      console.log('🔍 Поиск в записи:', record.barcode, {
+        nameMatch,
+        barcodeMatch,
+        dynamicMatch,
+        dynamicData: record.dynamicData
+      });
+      
+      return nameMatch || barcodeMatch || dynamicMatch;
+    });
+    console.log('🔍 После поиска осталось записей:', filtered.length);
+  }
 
   // Применение фильтров
-  const filteredRecords = useMemo(() => {
-    let filtered = records;
+  if (activeFilters.length > 0) {
+    console.log('🔍 Применяем фильтры к', filtered.length, 'записям');
+    const beforeFilter = filtered.length;
+    filtered = applyFiltersToData(filtered, activeFilters);
+    console.log('🔍 После фильтрации осталось записей:', filtered.length, 'из', beforeFilter);
+  }
 
-    // Поиск
-    if (searchQuery) {
-      filtered = filtered.filter((record: any) => {
-        const searchLower = searchQuery.toLowerCase();
-        return (
-          record.inventoryNumber?.toLowerCase().includes(searchLower) ||
-          record.barcode?.toLowerCase().includes(searchLower) ||
-          record.name?.toLowerCase().includes(searchLower) ||
-          JSON.stringify(record.dynamicData || {}).toLowerCase().includes(searchLower)
-        );
-      });
-    }
+  console.log('🔍 Финальный результат фильтрации:', filtered.length, 'записей');
+  return filtered;
+}, [records, searchQuery, activeFilters]);
 
-    // Применение фильтров
-    if (activeFilters.length > 0) {
-      filtered = applyFiltersToData(filtered, activeFilters);
-    }
-
-    return filtered;
-  }, [records, searchQuery, activeFilters]);
 
   // Сортировка
   const sortedRecords = useMemo(() => {

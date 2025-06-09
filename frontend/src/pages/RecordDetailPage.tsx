@@ -597,7 +597,7 @@ const RecordDetailPage: React.FC = () => {
                     onClick={handleBluetoothPrint}
                     size="small"
                   >
-                    Bluetooth печать
+                    Поделиться
                   </Button>
                 </Box>
               </CardContent>

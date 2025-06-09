@@ -590,7 +590,7 @@ export const BarcodePrintDialog: React.FC<BarcodePrintDialogProps> = ({
           startIcon={<BluetoothIcon />}
           sx={{ ml: 'auto', mr: 1 }}
         >
-          Bluetooth печать
+          Поделиться
         </Button>
         <Button 
           onClick={handlePrint} 

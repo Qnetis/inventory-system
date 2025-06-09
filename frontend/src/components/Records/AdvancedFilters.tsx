@@ -44,6 +44,7 @@ const getOperatorsForFieldType = (fieldType: string) => {
   switch (fieldType) {
     case 'text':
     case 'string':
+    case 'TEXT':
       return [
         { value: 'contains', label: 'Содержит' },
         { value: 'equals', label: 'Равно' },
@@ -53,6 +54,8 @@ const getOperatorsForFieldType = (fieldType: string) => {
       ];
     case 'number':
     case 'money':
+    case 'NUMBER':
+    case 'MONEY':
       return [
         { value: 'equals', label: 'Равно' },
         { value: 'notEquals', label: 'Не равно' },
@@ -64,11 +67,13 @@ const getOperatorsForFieldType = (fieldType: string) => {
       ];
     case 'checkbox':
     case 'boolean':
+    case 'CHECKBOX':
       return [
         { value: 'equals', label: 'Равно' },
         { value: 'notEquals', label: 'Не равно' },
       ];
     case 'select':
+    case 'SELECT':
       return [
         { value: 'equals', label: 'Равно' },
         { value: 'notEquals', label: 'Не равно' },
@@ -76,6 +81,7 @@ const getOperatorsForFieldType = (fieldType: string) => {
         { value: 'notIn', label: 'Не один из' },
       ];
     case 'date':
+    case 'DATE':
       return [
         { value: 'equals', label: 'Равно' },
         { value: 'notEquals', label: 'Не равно' },
@@ -91,51 +97,65 @@ const getOperatorsForFieldType = (fieldType: string) => {
   }
 };
 
-// Функция применения фильтров к данным
-export const applyFiltersToData = (data: any[], filters: FilterCondition[]) => {
-  if (!filters.length) return data;
-
-  return data.filter(record => {
-    return filters.every(filter => {
-      const fieldValue = getFieldValue(record, filter.field);
-      return applyFilterCondition(fieldValue, filter);
-    });
-  });
-};
-
+// ИСПРАВЛЕННАЯ функция получения значения поля
 const getFieldValue = (record: any, fieldName: string) => {
+  console.log('🔍 getFieldValue - Поиск поля:', fieldName, 'в записи:', record);
+  
   // Системные поля
-  if (fieldName === 'inventory_number') {
-    return record.attributes?.inventory_number || record.inventory_number;
-  }
   if (fieldName === 'barcode') {
-    return record.attributes?.barcode || record.barcode;
+    const value = record.barcode;
+    console.log('🔍 Системное поле barcode:', value);
+    return value;
   }
+  
+  if (fieldName === 'name') {
+    const value = record.name;
+    console.log('🔍 Системное поле name:', value);
+    return value;
+  }
+  
   if (fieldName === 'createdAt') {
-    return record.attributes?.createdAt || record.createdAt;
+    const value = record.createdAt;
+    console.log('🔍 Системное поле createdAt:', value);
+    return value;
   }
 
-  // Пользовательские поля
-  const customField = record.attributes?.fields?.find(
-    (f: any) => f.field_name === fieldName
-  ) || record.fields?.find(
-    (f: any) => f.field_name === fieldName
-  );
+  // ИСПРАВЛЕНИЕ: Ищем пользовательские поля в dynamicData
+  if (record.dynamicData && record.dynamicData[fieldName]) {
+    const value = record.dynamicData[fieldName];
+    console.log('🔍 Найдено в dynamicData:', fieldName, '=', value);
+    return value;
+  }
 
-  return customField?.value;
+  console.log('❌ Поле не найдено:', fieldName);
+  return undefined;
 };
 
+// Функция применения условия фильтра
 const applyFilterCondition = (fieldValue: any, filter: FilterCondition) => {
   const { operator, value, fieldType } = filter;
+  
+  console.log('🔍 applyFilterCondition:', {
+    fieldValue,
+    operator,
+    value,
+    fieldType
+  });
+
+  // Обработка undefined/null значений
+  if (fieldValue === undefined || fieldValue === null) {
+    // Если поле пустое, то только условия "equals" к пустому значению будут true
+    return operator === 'equals' && (value === '' || value === null || value === undefined);
+  }
 
   // Преобразуем значения для сравнения
   let normalizedFieldValue = fieldValue;
   let normalizedFilterValue = value;
 
-  if (fieldType === 'number' || fieldType === 'money') {
+  if (fieldType === 'number' || fieldType === 'money' || fieldType === 'NUMBER' || fieldType === 'MONEY') {
     normalizedFieldValue = parseFloat(fieldValue) || 0;
     normalizedFilterValue = parseFloat(value) || 0;
-  } else if (fieldType === 'checkbox' || fieldType === 'boolean') {
+  } else if (fieldType === 'checkbox' || fieldType === 'boolean' || fieldType === 'CHECKBOX') {
     normalizedFieldValue = Boolean(fieldValue);
     normalizedFilterValue = Boolean(value);
   } else if (typeof fieldValue === 'string') {
@@ -144,8 +164,11 @@ const applyFilterCondition = (fieldValue: any, filter: FilterCondition) => {
   }
 
   switch (operator) {
-    case 'equals':
-      return normalizedFieldValue === normalizedFilterValue;
+    case 'equals': {
+      const result = normalizedFieldValue === normalizedFilterValue;
+      console.log('🔍 equals:', normalizedFieldValue, '===', normalizedFilterValue, '=', result);
+      return result;
+    }
     case 'notEquals':
       return normalizedFieldValue !== normalizedFilterValue;
     case 'contains':
@@ -181,6 +204,29 @@ const applyFilterCondition = (fieldValue: any, filter: FilterCondition) => {
     default:
       return true;
   }
+};
+
+// ИСПРАВЛЕННАЯ функция применения фильтров к данным
+export const applyFiltersToData = (data: any[], filters: FilterCondition[]) => {
+  if (!filters.length) {
+    console.log('🔍 Нет фильтров, возвращаем все данные');
+    return data;
+  }
+
+  console.log('🔍 Применяем фильтры:', filters);
+  console.log('🔍 К данным:', data.slice(0, 2)); // показываем первые 2 записи для отладки
+
+  const filtered = data.filter(record => {
+    return filters.every(filter => {
+      const fieldValue = getFieldValue(record, filter.field);
+      const result = applyFilterCondition(fieldValue, filter);
+      console.log('🔍 Фильтр', filter.field, ':', fieldValue, '->', result);
+      return result;
+    });
+  });
+
+  console.log('🔍 Результат фильтрации:', filtered.length, 'из', data.length);
+  return filtered;
 };
 
 export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
@@ -221,10 +267,31 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   };
 
   const handleFieldChange = (id: string, fieldName: string) => {
-    const field = fields.find(f => f.name === fieldName);
+    // Находим тип поля
+    let fieldType = 'text';
+    
+    if (fieldName === 'barcode' || fieldName === 'name') {
+      fieldType = 'text';
+    } else if (fieldName === 'createdAt') {
+      fieldType = 'date';
+    } else {
+      // Ищем среди пользовательских полей
+      const field = fields.find(f => {
+        const fieldId = f.id?.toString();
+        return fieldId === fieldName;
+      });
+      
+      if (field) {
+        const fieldData = field.attributes || field;
+        fieldType = fieldData.fieldType?.toLowerCase() || 'text';
+      }
+    }
+    
+    console.log('🔍 handleFieldChange:', fieldName, 'type:', fieldType);
+    
     updateFilter(id, {
       field: fieldName,
-      fieldType: field?.field_type || 'text',
+      fieldType: fieldType,
       operator: 'contains',
       value: '',
     });
@@ -232,6 +299,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
   const handleApply = () => {
     const validFilters = filters.filter(f => f.field && f.value !== '');
+    console.log('🔍 Применяем фильтры:', validFilters);
     onApplyFilters(validFilters);
     onClose();
   };
@@ -242,7 +310,8 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   };
 
   const renderValueInput = (filter: FilterCondition) => {
-    const field = fields.find(f => f.name === filter.field);
+    const field = fields.find(f => f.id?.toString() === filter.field);
+    const fieldData = field?.attributes || field;
     
     if (filter.operator === 'between') {
       return (
@@ -250,7 +319,8 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           <TextField
             size="small"
             label="От"
-            type={filter.fieldType === 'number' || filter.fieldType === 'money' ? 'number' : 'text'}
+            type={filter.fieldType === 'number' || filter.fieldType === 'money' || 
+                  filter.fieldType === 'NUMBER' || filter.fieldType === 'MONEY' ? 'number' : 'text'}
             value={filter.value?.min || ''}
             onChange={(e) => updateFilter(filter.id, {
               value: { ...filter.value, min: e.target.value }
@@ -260,7 +330,8 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           <TextField
             size="small"
             label="До"
-            type={filter.fieldType === 'number' || filter.fieldType === 'money' ? 'number' : 'text'}
+            type={filter.fieldType === 'number' || filter.fieldType === 'money' ||
+                  filter.fieldType === 'NUMBER' || filter.fieldType === 'MONEY' ? 'number' : 'text'}
             value={filter.value?.max || ''}
             onChange={(e) => updateFilter(filter.id, {
               value: { ...filter.value, max: e.target.value }
@@ -270,9 +341,28 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
       );
     }
 
-    if (filter.fieldType === 'checkbox' || filter.fieldType === 'boolean') {
+    if (filter.fieldType === 'select' || filter.fieldType === 'SELECT') {
       return (
-        <FormControl size="small" sx={{ minWidth: 120 }}>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Значение</InputLabel>
+          <Select
+            value={filter.value}
+            onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+            label="Значение"
+          >
+            {fieldData?.options?.map((option: string) => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      );
+    }
+
+    if (filter.fieldType === 'checkbox' || filter.fieldType === 'CHECKBOX') {
+      return (
+        <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel>Значение</InputLabel>
           <Select
             value={filter.value === true ? 'true' : filter.value === false ? 'false' : ''}
@@ -286,35 +376,17 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
       );
     }
 
-    if (filter.fieldType === 'select' && field?.options) {
-      return (
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Значение</InputLabel>
-          <Select
-            value={filter.value}
-            onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-            label="Значение"
-            multiple={filter.operator === 'in' || filter.operator === 'notIn'}
-          >
-            {field.options.map((option: any) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      );
-    }
-
     return (
       <TextField
         size="small"
         label="Значение"
-        type={filter.fieldType === 'number' || filter.fieldType === 'money' ? 'number' : 
-              filter.fieldType === 'date' ? 'date' : 'text'}
+        sx={{ minWidth: 150 }}
+        type={filter.fieldType === 'number' || filter.fieldType === 'money' || 
+              filter.fieldType === 'NUMBER' || filter.fieldType === 'MONEY' ? 'number' : 
+              filter.fieldType === 'date' || filter.fieldType === 'DATE' ? 'date' : 'text'}
         value={filter.value}
         onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-        InputLabelProps={filter.fieldType === 'date' ? { shrink: true } : undefined}
+        InputLabelProps={filter.fieldType === 'date' || filter.fieldType === 'DATE' ? { shrink: true } : undefined}
       />
     );
   };
@@ -345,13 +417,18 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                     label="Поле"
                   >
                     <MenuItem value="barcode">Штрихкод</MenuItem>
+                    <MenuItem value="name">Название</MenuItem>
                     <MenuItem value="createdAt">Дата создания</MenuItem>
                     <Divider />
-                    {fields.map(field => (
-                      <MenuItem key={field.id} value={field.name}>
-                        {field.display_name || field.name}
-                      </MenuItem>
-                    ))}
+                    {fields.map(field => {
+                      const fieldData = field.attributes || field;
+                      const fieldId = field.id?.toString();
+                      return (
+                        <MenuItem key={field.id} value={fieldId}>
+                          {fieldData.name}
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </FormControl>
 
