@@ -206,37 +206,72 @@ const RecordDetailPage: React.FC = () => {
     updateMutation.mutate(updateData);
   };
 
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Печать штрихкода</title>
-            <style>
-              body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-              .barcode { margin: 20px 0; }
-              .info { margin: 10px 0; font-size: 14px; }
-            </style>
-          </head>
-          <body>
-            <h2>${record?.name || 'Запись'}</h2>
-            <div class="info">Штрихкод: ${record?.barcode}</div>
-            <div class="barcode">
-              <img src="${barcodeDataUrl}" alt="Штрихкод" />
-            </div>
-            <div class="info">Дата создания: ${record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : ''}</div>
-            <script>
-              window.onload = function() {
-                window.print();
-                window.close();
-              }
-            </script>
-          </body>
-        </html>
-      `);
+
+const handlePrint = () => {
+  // Создаем скрытый элемент для печати
+  const printContent = document.createElement('div');
+  printContent.innerHTML = `
+    <div style="
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      width: 100%;
+      box-sizing: border-box;
+    ">
+      <h2 style="margin-bottom: 20px;">${record?.name || 'Запись'}</h2>
+      <div style="margin: 10px 0; font-size: 14px;">
+        Штрихкод: ${record?.barcode}
+      </div>
+      <div style="margin: 20px 0;">
+        <img src="${barcodeDataUrl}" alt="Штрихкод" style="max-width: 300px;" />
+      </div>
+      <div style="margin: 10px 0; font-size: 14px;">
+        Инвентарный номер: ${record?.inventoryNumber || ''}
+      </div>
+      <div style="margin: 10px 0; font-size: 14px;">
+        Дата создания: ${record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : ''}
+      </div>
+    </div>
+  `;
+
+  // Добавляем стили для печати
+  const printStyles = document.createElement('style');
+  printStyles.textContent = `
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #print-content, #print-content * {
+        visibility: visible;
+      }
+      #print-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      @page {
+        margin: 10mm;
+        size: A4;
+      }
     }
-  };
+  `;
+
+  // Добавляем элементы в документ
+  printContent.id = 'print-content';
+  document.head.appendChild(printStyles);
+  document.body.appendChild(printContent);
+
+  // Вызываем печать
+  window.print();
+
+  // Удаляем элементы после печати
+  setTimeout(() => {
+    document.head.removeChild(printStyles);
+    document.body.removeChild(printContent);
+  }, 100);
+};
+
 
   const handleBluetoothPrint = async () => {
     try {
