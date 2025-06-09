@@ -80,14 +80,7 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
                 <CardContent>
                   <Stack spacing={1}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Box>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Инв. №
-                        </Typography>
-                        <Typography variant="body1" fontWeight="medium">
-                          {recordData.inventoryNumber}
-                        </Typography>
-                      </Box>
+
                       <Chip 
                         label={format(new Date(recordData.createdAt), 'dd.MM.yy', { locale: ru })}
                         size="small"
@@ -198,7 +191,6 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
                   onClick={() => onRowClick(record)}
                   sx={{ cursor: 'pointer' }}
                 >
-                  <TableCell>{recordData.inventoryNumber}</TableCell>
                   <TableCell>{recordData.barcode}</TableCell>
                   {customFields.slice(0, 3).map((field) => {
                     const fieldData = field.attributes || field;
@@ -224,7 +216,7 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
             })}
             {records.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5 + customFields.slice(0, 3).length} align="center">
+                <TableCell colSpan={4 + customFields.slice(0, 3).length} align="center">
                   Записи не найдены
                 </TableCell>
               </TableRow>

@@ -478,13 +478,13 @@ export const RecordsPage: React.FC = () => {
               
               <TableBody>
                 {paginatedRecords.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={fieldsData?.data?.length + 5} align="center">
-                      <Typography color="text.secondary">
-                        Записи не найдены
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+<TableRow>
+  <TableCell colSpan={5 + Math.min(fieldsData?.data?.length || 0, 3)} align="center">
+    <Typography color="text.secondary">
+      Записи не найдены
+    </Typography>
+  </TableCell>
+</TableRow>
                 ) : (
                   paginatedRecords.map((record) => {
                     const canEdit = record.canEdit || record.isOwner || isAdmin;
@@ -497,10 +497,7 @@ export const RecordsPage: React.FC = () => {
                         onClick={() => handleRowClick(record)}
                         sx={{ cursor: 'pointer' }}
                       >
-                        <TableCell>
-                          {record.inventoryNumber}
-                        </TableCell>
-                        
+
                         <TableCell>
                           {record.barcode}
                         </TableCell>
