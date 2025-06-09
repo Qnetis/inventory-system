@@ -344,7 +344,6 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                     onChange={(e) => handleFieldChange(filter.id, e.target.value)}
                     label="Поле"
                   >
-                    <MenuItem value="inventory_number">Инвентарный номер</MenuItem>
                     <MenuItem value="barcode">Штрихкод</MenuItem>
                     <MenuItem value="createdAt">Дата создания</MenuItem>
                     <Divider />

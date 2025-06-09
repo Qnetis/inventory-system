@@ -434,15 +434,7 @@ export const RecordsPage: React.FC = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>
-                    <TableSortLabel
-                      active={orderBy === 'inventoryNumber'}
-                      direction={orderBy === 'inventoryNumber' ? order : 'asc'}
-                      onClick={() => handleSort('inventoryNumber')}
-                    >
-                      Инвентарный номер
-                    </TableSortLabel>
-                  </TableCell>
+
                   
                   <TableCell>
                     <TableSortLabel

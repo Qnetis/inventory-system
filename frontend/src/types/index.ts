@@ -18,10 +18,11 @@ export interface CustomField {
   order: number;
 }
 
+// Обновленный интерфейс Record без inventoryNumber
 export interface Record {
   id: string;
-  inventoryNumber: string;
-  barcode: string;
+  barcode: string; // Теперь barcode - единственный уникальный идентификатор
+  name?: string; // Название записи (опционально)
   dynamicData: { [key: string]: any };
   owner: User;
   createdAt: string;

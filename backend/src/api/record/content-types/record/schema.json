@@ -19,24 +19,6 @@
     }
   },
   "attributes": {
-    "inventoryNumber": {
-      "type": "string",
-      "required": true,
-      "unique": true,
-      "configurable": false,
-      "pluginOptions": {
-        "content-manager": {
-          "visible": true,
-          "edit": {
-            "label": "Инвентарный номер",
-            "description": "Генерируется автоматически при создании",
-            "placeholder": "Будет сгенерирован автоматически",
-            "visible": true,
-            "editable": false
-          }
-        }
-      }
-    },
     "barcode": {
       "type": "string",
       "required": true,
@@ -47,7 +29,7 @@
           "visible": true,
           "edit": {
             "label": "Штрихкод EAN-13",
-            "description": "Генерируется автоматически при создании",
+            "description": "Генерируется автоматически при создании и служит уникальным идентификатором",
             "placeholder": "Будет сгенерирован автоматически",
             "visible": true,
             "editable": false

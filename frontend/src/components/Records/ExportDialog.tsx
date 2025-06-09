@@ -1,4 +1,3 @@
-// frontend/src/components/Records/ExportDialog.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useState } from 'react';
@@ -15,12 +14,14 @@ import {
   Radio,
   Checkbox,
   FormGroup,
-  Typography,
   Box,
+  Typography,
   Alert,
   CircularProgress,
 } from '@mui/material';
 import { Download as DownloadIcon } from '@mui/icons-material';
+import { format as formatDate } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 interface ExportDialogProps {
   open: boolean;
@@ -35,137 +36,132 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   records,
   fields,
 }) => {
-  const [format, setFormat] = useState<'csv' | 'excel'>('csv');
-  const [selectedFields, setSelectedFields] = useState<string[]>([]);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'excel'>('csv');
   const [includeSystemFields, setIncludeSystemFields] = useState(true);
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
-
-  React.useEffect(() => {
-    if (open && fields.length > 0) {
-      // По умолчанию выбираем все поля
-      setSelectedFields(fields.map(f => f.id));
-    }
-  }, [open, fields]);
 
   const handleFieldToggle = (fieldId: string) => {
     setSelectedFields(prev => 
-      prev.includes(fieldId)
+      prev.includes(fieldId) 
         ? prev.filter(id => id !== fieldId)
         : [...prev, fieldId]
     );
   };
 
   const handleSelectAll = () => {
-    setSelectedFields(fields.map(f => f.id));
+    setSelectedFields(fields.map(field => field.id));
   };
 
   const handleSelectNone = () => {
     setSelectedFields([]);
   };
 
-  const generateCSV = () => {
-    const headers = [];
+  const formatFieldValue = (value: any, fieldType: string) => {
+    if (!value) return '';
     
-    // Системные поля
-    if (includeSystemFields) {
-      headers.push('Инвентарный номер', 'Штрихкод', 'Дата создания', 'Создатель');
+    switch (fieldType) {
+      case 'MONEY':
+        return new Intl.NumberFormat('ru-RU', {
+          style: 'currency',
+          currency: 'RUB'
+        }).format(parseFloat(value));
+      case 'NUMBER':
+        return new Intl.NumberFormat('ru-RU').format(parseFloat(value));
+      case 'CHECKBOX':
+        return value ? 'Да' : 'Нет';
+      default:
+        return value;
     }
-    
-    // Пользовательские поля
-    selectedFields.forEach(fieldId => {
-      const field = fields.find(f => f.id === fieldId);
-      if (field) {
-        headers.push(field.display_name || field.name);
-      }
-    });
-
-    const rows = [headers.join(',')];
-
-    records.forEach(record => {
-      const row = [];
-      
-      // Системные поля
-      if (includeSystemFields) {
-        row.push(
-          `"${record.attributes?.inventory_number || record.inventory_number || ''}"`,
-          `"${record.attributes?.barcode || record.barcode || ''}"`,
-          `"${new Date(record.attributes?.createdAt || record.createdAt).toLocaleDateString('ru-RU')}"`,
-          `"${record.attributes?.created_by?.full_name || record.attributes?.created_by?.username || record.created_by?.full_name || record.created_by?.username || ''}"`
-        );
-      }
-      
-      // Пользовательские поля
-      selectedFields.forEach(fieldId => {
-        const field = fields.find(f => f.id === fieldId);
-        if (field) {
-          const recordField = record.attributes?.fields?.find(
-            (f: any) => f.field_name === field.name
-          ) || record.fields?.find(
-            (f: any) => f.field_name === field.name
-          );
-          
-          let value = recordField?.value || '';
-          
-          // Форматирование в зависимости от типа поля
-          if (field.field_type === 'money' && value) {
-            value = new Intl.NumberFormat('ru-RU').format(parseFloat(value));
-          } else if (field.field_type === 'checkbox') {
-            value = value ? 'Да' : 'Нет';
-          }
-          
-          row.push(`"${String(value).replace(/"/g, '""')}"`);
-        }
-      });
-      
-      rows.push(row.join(','));
-    });
-
-    return rows.join('\n');
   };
 
-  const downloadFile = (content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const prepareExportData = () => {
+    const headers: string[] = [];
+    const fieldMap: { [key: string]: any } = {};
+
+    // Системные поля
+    if (includeSystemFields) {
+      headers.push('Штрихкод', 'Название', 'Дата создания', 'Создатель');
+    }
+
+    // Пользовательские поля
+    fields.forEach(field => {
+      if (selectedFields.includes(field.id)) {
+        const fieldData = field.attributes || field;
+        headers.push(fieldData.name);
+        fieldMap[field.id] = fieldData;
+      }
+    });
+
+    // Подготовка данных
+    const exportData = records.map(record => {
+      const row: any = {};
+
+      if (includeSystemFields) {
+        row['Штрихкод'] = record.barcode || '';
+        row['Название'] = record.name || '';
+        row['Дата создания'] = record.createdAt ? 
+          formatDate(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : '';
+        row['Создатель'] = record.owner?.username || record.owner?.email || '';
+      }
+
+      // Пользовательские поля
+      fields.forEach(field => {
+        if (selectedFields.includes(field.id)) {
+          const fieldData = fieldMap[field.id];
+          const value = record.dynamicData?.[field.id];
+          row[fieldData.name] = formatFieldValue(value, fieldData.fieldType);
+        }
+      });
+
+      return row;
+    });
+
+    return { headers, data: exportData };
   };
 
   const handleExport = async () => {
-    if (selectedFields.length === 0 && !includeSystemFields) {
-      return;
-    }
-
-    setIsExporting(true);
-    
     try {
-      const timestamp = new Date().toISOString().split('T')[0];
-      
-      if (format === 'csv') {
-        const csvContent = generateCSV();
-        downloadFile(
-          '\uFEFF' + csvContent, // BOM для корректного отображения русских символов
-          `records_${timestamp}.csv`,
-          'text/csv;charset=utf-8'
-        );
+      setIsExporting(true);
+      const { data } = prepareExportData();
+
+      if (exportFormat === 'csv') {
+        // CSV экспорт
+        const csvContent = [
+          // Заголовки
+          Object.keys(data[0] || {}).join(','),
+          // Данные
+          ...data.map(row => 
+            Object.values(row).map(value => 
+              typeof value === 'string' && value.includes(',') 
+                ? `"${value}"` 
+                : value
+            ).join(',')
+          )
+        ].join('\n');
+
+        // Создаем и скачиваем файл без внешних библиотек
+        const blob = new Blob(['\ufeff' + csvContent], { 
+          type: 'text/csv;charset=utf-8' 
+        });
+        
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `records_export_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       } else {
-        // Для Excel можно использовать библиотеку xlsx
-        // Пока что используем CSV формат с расширением .xlsx
-        const csvContent = generateCSV();
-        downloadFile(
-          '\uFEFF' + csvContent,
-          `records_${timestamp}.xlsx`,
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        );
+        // Excel экспорт - упрощенная версия без XLSX
+        alert('Экспорт в Excel временно недоступен. Используйте CSV формат.');
       }
-      
+
       onClose();
     } catch (error) {
-      console.error('Ошибка экспорта:', error);
+      console.error('Export error:', error);
+      alert('Ошибка при экспорте данных');
     } finally {
       setIsExporting(false);
     }
@@ -190,12 +186,17 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           <FormControl component="fieldset" sx={{ mb: 3 }}>
             <FormLabel component="legend">Формат файла</FormLabel>
             <RadioGroup
-              value={format}
-              onChange={(e) => setFormat(e.target.value as 'csv' | 'excel')}
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as 'csv' | 'excel')}
               row
             >
               <FormControlLabel value="csv" control={<Radio />} label="CSV" />
-              <FormControlLabel value="excel" control={<Radio />} label="Excel" />
+              <FormControlLabel 
+                value="excel" 
+                control={<Radio />} 
+                label="Excel (временно недоступен)" 
+                disabled
+              />
             </RadioGroup>
           </FormControl>
 
@@ -208,7 +209,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                   onChange={(e) => setIncludeSystemFields(e.target.checked)}
                 />
               }
-              label="Включить системные поля (инвентарный номер, штрихкод, дата создания, создатель)"
+              label="Включить системные поля (штрихкод, название, дата создания, создатель)"
             />
           </FormControl>
 
@@ -227,18 +228,21 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             </Box>
             
             <FormGroup>
-              {fields.map((field) => (
-                <FormControlLabel
-                  key={field.id}
-                  control={
-                    <Checkbox
-                      checked={selectedFields.includes(field.id)}
-                      onChange={() => handleFieldToggle(field.id)}
-                    />
-                  }
-                  label={field.display_name || field.name}
-                />
-              ))}
+              {fields.map((field) => {
+                const fieldData = field.attributes || field;
+                return (
+                  <FormControlLabel
+                    key={field.id}
+                    control={
+                      <Checkbox
+                        checked={selectedFields.includes(field.id)}
+                        onChange={() => handleFieldToggle(field.id)}
+                      />
+                    }
+                    label={fieldData.name}
+                  />
+                );
+              })}
             </FormGroup>
           </FormControl>
 

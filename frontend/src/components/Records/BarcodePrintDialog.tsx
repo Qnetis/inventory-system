@@ -479,15 +479,7 @@ export const BarcodePrintDialog: React.FC<BarcodePrintDialogProps> = ({
                 }
                 label="Показывать название"
               />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={settings.showInventoryNumber}
-                    onChange={(e) => updateSettings('showInventoryNumber', e.target.checked)}
-                  />
-                }
-                label="Показывать инвентарный номер"
-              />
+
               <FormControlLabel
                 control={
                   <Checkbox

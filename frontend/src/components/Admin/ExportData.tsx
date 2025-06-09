@@ -116,10 +116,7 @@ const ExportData: React.FC = () => {
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     Стандартные поля:
                   </Typography>
-                  <FormControlLabel
-                    control={<Checkbox checked disabled />}
-                    label="Инвентарный номер"
-                  />
+
                   <FormControlLabel
                     control={<Checkbox checked disabled />}
                     label="Штрихкод"

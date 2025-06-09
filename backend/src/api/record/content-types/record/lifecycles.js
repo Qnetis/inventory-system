@@ -1,5 +1,4 @@
 // backend/src/api/record/content-types/record/lifecycles.js
-const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
   async beforeCreate(event) {
@@ -7,19 +6,14 @@ module.exports = {
     
     console.log('Record lifecycle beforeCreate called with data:', data);
     
-    // Если нет инвентарного номера, генерируем
-    if (!data.inventoryNumber) {
-      data.inventoryNumber = uuidv4();
-    }
-    
     // Если нет штрихкода, генерируем
     if (!data.barcode) {
       data.barcode = generateEAN13();
     }
     
-    // Если нет имени, генерируем
+    // Если нет имени, генерируем на основе штрихкода
     if (!data.name) {
-      data.name = `Запись ${data.inventoryNumber.slice(0, 8)}`;
+      data.name = `Запись ${data.barcode.slice(0, 8)}`;
     }
     
     // Если нет владельца и есть пользователь в контексте
@@ -85,4 +79,4 @@ async function validateCustomFields(dynamicData) {
     console.error('Validation error:', error);
     throw error;
   }
-}
+}Ы
