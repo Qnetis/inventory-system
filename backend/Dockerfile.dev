@@ -1,0 +1,33 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Установка системных зависимостей для canvas
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    musl-dev \
+    giflib-dev \
+    pixman-dev \
+    pangomm-dev \
+    libjpeg-turbo-dev \
+    freetype-dev
+
+# Установка wait-port для ожидания базы данных
+RUN npm install -g wait-port
+
+# Установка зависимостей
+COPY package*.json ./
+RUN npm install
+
+# Копирование исходного кода
+COPY . .
+
+EXPOSE 1337
+
+# Команда для разработки
+CMD ["npm", "run", "develop"]

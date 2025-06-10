@@ -1,0 +1,64 @@
+services:
+  # База данных PostgreSQL
+  database:
+    image: postgres:15
+    container_name: inventory_db_dev
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Strapi Backend для разработки
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: inventory_backend_dev
+    environment:
+      - NODE_ENV=development
+      - DATABASE_CLIENT=postgres
+      - DATABASE_URL=postgresql://postgres:postgres@database:5432/inventory_db
+      - DATABASE_HOST=database
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=inventory_db
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=postgres
+      - JWT_SECRET=dev_jwt_secret_key
+      - ADMIN_JWT_SECRET=dev_admin_jwt_secret_key
+      - APP_KEYS=key1,key2,key3,key4
+      - API_TOKEN_SALT=dev_api_token_salt
+      - TRANSFER_TOKEN_SALT=dev_transfer_token_salt
+      - HOST=0.0.0.0
+      - PORT=1337
+    ports:
+      - "1337:1337"
+    depends_on:
+      - database
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/public/uploads:/app/public/uploads
+    restart: unless-stopped
+
+  # Frontend для разработки
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: inventory_frontend_dev
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+volumes:
+  postgres_data_dev:
