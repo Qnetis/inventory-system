@@ -108,11 +108,7 @@ const getFieldValue = (record: any, fieldName: string) => {
     return value;
   }
   
-  if (fieldName === 'name') {
-    const value = record.name;
-    console.log('🔍 Системное поле name:', value);
-    return value;
-  }
+
   
   if (fieldName === 'createdAt') {
     const value = record.createdAt;

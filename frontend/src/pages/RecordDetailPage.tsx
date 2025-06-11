@@ -367,33 +367,7 @@ const handlePrint = () => {
                     />
                   </Grid>
 
-                  {/* Название записи */}
-                  <Grid size={12}>
-                    {isEditing ? (
-                      <Controller
-                        name="name"
-                        control={control}
-                        render={({ field }) => (
-                          <TextField
-                            {...field}
-                            label="Название записи"
-                            fullWidth
-                            variant="outlined"
-                            error={!!errors.name}
-                            helperText={errors.name?.message as string}
-                          />
-                        )}
-                      />
-                    ) : (
-                      <TextField
-                        label="Название записи"
-                        value={record.name || ''}
-                        fullWidth
-                        disabled
-                        variant="outlined"
-                      />
-                    )}
-                  </Grid>
+                
                 </Grid>
 
                 {/* Пользовательские поля */}

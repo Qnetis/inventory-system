@@ -129,16 +129,7 @@ const RecordsTable: React.FC<RecordsTableProps> = ({
                       </Typography>
                     </Box>
 
-                    {recordData.name && (
-                      <Box>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Название
-                        </Typography>
-                        <Typography variant="body2">
-                          {recordData.name}
-                        </Typography>
-                      </Box>
-                    )}
+
 
                     {/* ОБНОВЛЕНО: Показываем первые 2 видимых поля */}
                     {visibleFields.slice(0, 2).map((field) => {

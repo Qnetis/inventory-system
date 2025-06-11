@@ -87,13 +87,13 @@ const CreateRecordDialog: React.FC<CreateRecordDialogProps> = ({
         )}
         
         {/* ИСПРАВЛЕНИЕ: Убираем форму отсюда, DynamicForm управляет своей формой */}
-        <DynamicForm
-          ref={dynamicFormRef}
-          fields={fields}
-          onSubmit={handleSubmit}
-          showNameField={true}
-          showSubmitButton={false} // Не показываем кнопку в форме
-        />
+<DynamicForm
+  ref={dynamicFormRef}
+  fields={fields}
+  onSubmit={handleSubmit}
+  showNameField={false} // Было: true
+  showSubmitButton={false}
+/>
       </DialogContent>
 
       <DialogActions sx={{ p: 2, pt: 1 }}>

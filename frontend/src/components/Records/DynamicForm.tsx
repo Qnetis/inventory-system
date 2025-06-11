@@ -38,7 +38,6 @@ const DynamicForm = React.forwardRef<DynamicFormRef, DynamicFormProps>(({
   fields,
   onSubmit,
   defaultValues,
-  showNameField = false,
   submitButtonText = 'Сохранить',
   showSubmitButton = true, // По умолчанию показываем
 }, ref) => {
@@ -46,7 +45,6 @@ const DynamicForm = React.forwardRef<DynamicFormRef, DynamicFormProps>(({
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { control, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
-      name: defaultValues?.name || '',
       ...defaultValues,
     },
   });
@@ -59,11 +57,7 @@ const DynamicForm = React.forwardRef<DynamicFormRef, DynamicFormProps>(({
     const dynamicData: any = {};
     const result: any = {};
     
-    // Добавляем имя записи если есть
-    if (showNameField && data.name) {
-      result.name = data.name;
-    }
-    
+
     // Формируем динамические данные
     fields.forEach((field) => {
       const value = data[field.id];
@@ -232,22 +226,7 @@ const DynamicForm = React.forwardRef<DynamicFormRef, DynamicFormProps>(({
       onSubmit={handleSubmit(onFormSubmit)}
       sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
     >
-      {showNameField && (
-        <Controller
-          name="name"
-          control={control}
-          render={({ field: { onChange, value } }) => (
-            <TextField
-              fullWidth
-              size={isMobile ? "small" : "medium"}
-              label="Название записи (необязательно)"
-              value={value || ''}
-              onChange={onChange}
-              helperText="Если не указано, будет сгенерировано автоматически"
-            />
-          )}
-        />
-      )}
+
 
       {fields
         .sort((a, b) => {

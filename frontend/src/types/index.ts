@@ -22,7 +22,6 @@ export interface CustomField {
 export interface Record {
   id: string;
   barcode: string; // Теперь barcode - единственный уникальный идентификатор
-  name?: string; // Название записи (опционально)
   dynamicData: { [key: string]: any };
   owner: User;
   createdAt: string;

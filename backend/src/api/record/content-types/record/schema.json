@@ -37,20 +37,6 @@
         }
       }
     },
-    "name": {
-      "type": "string",
-      "required": false,
-      "pluginOptions": {
-        "content-manager": {
-          "visible": true,
-          "edit": {
-            "label": "Название записи",
-            "description": "Необязательное поле для удобства",
-            "placeholder": "Введите название"
-          }
-        }
-      }
-    },
     "dynamicData": {
       "type": "json",
       "pluginOptions": {

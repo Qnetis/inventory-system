@@ -555,17 +555,6 @@ export interface ApiRecordRecord extends Struct.CollectionTypeSchema {
       'api::record.record'
     > &
       Schema.Attribute.Private;
-    name: Schema.Attribute.String &
-      Schema.Attribute.SetPluginOptions<{
-        'content-manager': {
-          edit: {
-            description: '\u041D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u043F\u043E\u043B\u0435 \u0434\u043B\u044F \u0443\u0434\u043E\u0431\u0441\u0442\u0432\u0430';
-            label: '\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u043F\u0438\u0441\u0438';
-            placeholder: '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u0435';
-          };
-          visible: true;
-        };
-      }>;
     owner: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'

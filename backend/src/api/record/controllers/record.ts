@@ -431,7 +431,7 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
       });
       
       // Обновленные заголовки без inventoryNumber
-      const headers = ['barcode', 'name', 'createdAt', 'owner'];
+const headers = ['barcode', 'createdAt', 'owner'];
       
       if (selectedFields && selectedFields.length > 0) {
         selectedFields.forEach((fieldId: string) => {
@@ -448,12 +448,11 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
         output = headers.join(',') + '\n';
         
         records.forEach((record: any) => {
-          const row = [
-            record.barcode || '',
-            record.name || '',
-            record.createdAt || '',
-            record.owner?.username || record.owner?.email || ''
-          ];
+const row = [
+  record.barcode || '',
+  record.createdAt || '',
+  record.owner?.username || record.owner?.email || ''
+];
           
           if (selectedFields && selectedFields.length > 0) {
             selectedFields.forEach((fieldId: string) => {

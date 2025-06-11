@@ -81,7 +81,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
     // Системные поля
     if (includeSystemFields) {
-      headers.push('Штрихкод', 'Название', 'Дата создания', 'Создатель');
+      headers.push('Штрихкод', 'Дата создания', 'Создатель');
     }
 
     // Пользовательские поля
@@ -99,7 +99,6 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
       if (includeSystemFields) {
         row['Штрихкод'] = record.barcode || '';
-        row['Название'] = record.name || '';
         row['Дата создания'] = record.createdAt ? 
           formatDate(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : '';
         row['Создатель'] = record.owner?.username || record.owner?.email || '';

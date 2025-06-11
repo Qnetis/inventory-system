@@ -11,10 +11,7 @@ module.exports = {
       data.barcode = generateEAN13();
     }
     
-    // Если нет имени, генерируем на основе штрихкода
-    if (!data.name) {
-      data.name = `Запись ${data.barcode.slice(0, 8)}`;
-    }
+
     
     // Если нет владельца и есть пользователь в контексте
     if (!data.owner && event.state?.user) {
