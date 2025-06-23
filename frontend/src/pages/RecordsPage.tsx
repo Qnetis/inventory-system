@@ -68,7 +68,7 @@ export const RecordsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [orderBy, setOrderBy] = useState<string>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  const [showAllRecords, setShowAllRecords] = useState(isAdmin);
+  const [showAllRecords, setShowAllRecords] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -400,24 +400,23 @@ export const RecordsPage: React.FC = () => {
               sx={{ flex: 1 }}
             />
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={showAllRecords}
-                  onChange={(e) => handleShowAllToggle(e.target.checked)}
-                  disabled={!isAdmin}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {!isAdmin && <LockIcon sx={{ fontSize: 16, color: 'text.secondary' }} />}
-                  <PersonIcon sx={{ fontSize: 16 }} />
-                  <Typography variant="body2">
-                    {showAllRecords ? 'Все записи' : 'Только мои'}
-                  </Typography>
-                </Box>
-              }
-            />
+           <FormControlLabel
+  control={
+    <Switch
+      checked={showAllRecords}
+      onChange={(e) => handleShowAllToggle(e.target.checked)}
+      // disabled убран - теперь доступно всем пользователям
+    />
+  }
+  label={
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <PersonIcon sx={{ fontSize: 16 }} />
+      <Typography variant="body2">
+        {showAllRecords ? 'Все записи' : 'Только мои'}
+      </Typography>
+    </Box>
+  }
+/>
           </Box>
 
           {/* Активные фильтры */}
