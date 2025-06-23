@@ -38,7 +38,6 @@ import {
   MoreVert as MoreVertIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Lock as LockIcon,
   Person as PersonIcon,
   ViewColumn as ViewColumnIcon,
 } from '@mui/icons-material';

@@ -1,5 +1,5 @@
-// frontend/src/App.tsx
-import React from 'react';
+
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
@@ -69,13 +69,11 @@ function App() {
               <Route path="/" element={<Layout />}>
                 <Route index element={<Navigate to="/records" />} />
                 <Route path="records" element={<RecordsPage />} />
-                {/* ИСПРАВЛЕНИЕ: Добавляем обработку для недопустимых ID */}
                 <Route path="records/create" element={<Navigate to="/records" replace />} />
                 <Route path="records/new" element={<Navigate to="/records" replace />} />
                 <Route path="records/add" element={<Navigate to="/records" replace />} />
                 <Route path="records/:id" element={<RecordDetailPage />} />
                 <Route path="admin" element={<AdminPage />} />
-                {/* Обработка неизвестных роутов */}
                 <Route path="*" element={<Navigate to="/records" replace />} />
               </Route>
             </Routes>
