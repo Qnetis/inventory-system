@@ -47,6 +47,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
     container_name: inventory_frontend_prod
     ports:
       - "80:80"
