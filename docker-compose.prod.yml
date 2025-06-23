@@ -48,7 +48,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=http://93.189.228.76:1337
+        # КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Убираем порт, чтобы фронтенд использовал nginx proxy
+        - VITE_API_URL=http://93.189.228.76
     container_name: inventory_frontend_prod
     ports:
       - "80:80"
