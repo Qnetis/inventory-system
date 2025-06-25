@@ -49,20 +49,37 @@ const FieldManagement: React.FC = () => {
   });
   const [newOption, setNewOption] = useState('');
 
-  // Получение полей
+  // Получение полей с улучшенной обработкой ошибок
   const { data: fields = [], isLoading, error } = useQuery({
     queryKey: ['customFields'],
     queryFn: async () => {
       try {
-        const { data } = await api.get('/api/custom-fields?sort=order');
-        console.log('Custom fields response:', data);
-        return data.data || [];
+        const response = await api.get('/api/custom-fields?sort=order');
+        console.log('Custom fields full response:', response);
+        console.log('Custom fields response data:', response.data);
+        
+        // Проверяем различные возможные форматы ответа
+        if (response?.data?.data && Array.isArray(response.data.data)) {
+          return response.data.data;
+        }
+        
+        // Fallback: если данные пришли в корневом data
+        if (response?.data && Array.isArray(response.data)) {
+          return response.data;
+        }
+        
+        // Если ничего не найдено, возвращаем пустой массив
+        console.warn('Unexpected response format:', response);
+        return [];
       } catch (error) {
         console.error('Error fetching custom fields:', error);
         throw error;
       }
     },
   });
+
+  // Дополнительная проверка на случай если fields не массив
+  const safeFields = Array.isArray(fields) ? fields : [];
 
   // Создание/обновление поля
   const saveMutation = useMutation({
@@ -106,7 +123,7 @@ const FieldManagement: React.FC = () => {
         fieldType: 'TEXT',
         isRequired: false,
         options: [],
-        order: fields.length,
+        order: safeFields.length,
       });
     }
     setIsDialogOpen(true);
@@ -154,6 +171,8 @@ const FieldManagement: React.FC = () => {
       <Box p={4}>
         <Alert severity="error">
           Ошибка загрузки полей. Попробуйте обновить страницу.
+          <br />
+          <small>Детали ошибки: {error.message}</small>
         </Alert>
       </Box>
     );
@@ -184,17 +203,17 @@ const FieldManagement: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {fields.length === 0 ? (
+            {safeFields.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align="center">
                   Нет созданных полей
                 </TableCell>
               </TableRow>
             ) : (
-              fields.map((field: any) => {
+              safeFields.map((field: any) => {
                 // Безопасное извлечение данных с поддержкой обоих форматов
-                const fieldData = field.attributes || field;
-                const fieldId = field.id;
+                const fieldData = field?.attributes || field;
+                const fieldId = field?.id;
                 
                 if (!fieldData || !fieldId) {
                   console.warn('Invalid field data:', field);
@@ -212,7 +231,7 @@ const FieldManagement: React.FC = () => {
                       {fieldData.isRequired ? 'Да' : 'Нет'}
                     </TableCell>
                     <TableCell>
-                      {fieldData.fieldType === 'SELECT' && fieldData.options && (
+                      {fieldData.fieldType === 'SELECT' && fieldData.options && Array.isArray(fieldData.options) && (
                         <>
                           {fieldData.options.map((opt: string, idx: number) => (
                             <Chip 
@@ -257,15 +276,15 @@ const FieldManagement: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
               error={saveMutation.isError && !formData.name}
-              helperText={saveMutation.isError && !formData.name ? 'Название обязательно' : ''}
+              helperText={saveMutation.isError && !formData.name ? 'Обязательное поле' : ''}
             />
 
             <FormControl fullWidth>
               <InputLabel>Тип поля</InputLabel>
               <Select
                 value={formData.fieldType}
-                onChange={(e) => setFormData({ ...formData, fieldType: e.target.value })}
                 label="Тип поля"
+                onChange={(e) => setFormData({ ...formData, fieldType: e.target.value })}
               >
                 <MenuItem value="TEXT">Текст</MenuItem>
                 <MenuItem value="NUMBER">Число</MenuItem>
@@ -279,9 +298,7 @@ const FieldManagement: React.FC = () => {
               control={
                 <Checkbox
                   checked={formData.isRequired}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isRequired: e.target.checked })
-                  }
+                  onChange={(e) => setFormData({ ...formData, isRequired: e.target.checked })}
                 />
               }
               label="Обязательное поле"
@@ -289,32 +306,30 @@ const FieldManagement: React.FC = () => {
 
             {formData.fieldType === 'SELECT' && (
               <Box>
-                <TextField
-                  fullWidth
-                  label="Добавить опцию"
-                  value={newOption}
-                  onChange={(e) => setNewOption(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddOption();
-                    }
-                  }}
-                  InputProps={{
-                    endAdornment: (
-                      <Button onClick={handleAddOption} disabled={!newOption.trim()}>
-                        Добавить
-                      </Button>
-                    ),
-                  }}
-                />
-                <Box sx={{ mt: 1 }}>
+                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                  <TextField
+                    label="Добавить опцию"
+                    value={newOption}
+                    onChange={(e) => setNewOption(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddOption();
+                      }
+                    }}
+                    fullWidth
+                  />
+                  <Button onClick={handleAddOption} variant="outlined">
+                    Добавить
+                  </Button>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {formData.options.map((option, index) => (
                     <Chip
-                      key={`option-${index}`}
+                      key={index}
                       label={option}
                       onDelete={() => handleRemoveOption(index)}
-                      sx={{ mr: 1, mb: 1 }}
+                      variant="outlined"
                     />
                   ))}
                 </Box>
@@ -323,11 +338,13 @@ const FieldManagement: React.FC = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Отмена</Button>
+          <Button onClick={handleCloseDialog}>
+            Отмена
+          </Button>
           <Button 
             onClick={handleSave} 
-            variant="contained"
-            disabled={saveMutation.isPending || !formData.name.trim()}
+            variant="contained" 
+            disabled={saveMutation.isPending || !formData.name}
           >
             {saveMutation.isPending ? 'Сохранение...' : 'Сохранить'}
           </Button>
