@@ -32,7 +32,7 @@ const Statistics: React.FC = () => {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   // Получение статистики с улучшенной обработкой ошибок
-  const { data: statisticsResponse, isLoading, error, refetch } = useQuery({
+  const { data: statisticsResponse, isLoading, error } = useQuery({
     queryKey: ['statistics', period],
     queryFn: async () => {
       try {
