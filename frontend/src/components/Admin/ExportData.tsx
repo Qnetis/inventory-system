@@ -27,14 +27,39 @@ const ExportData: React.FC = () => {
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(true);
 
-  // Получение кастомных полей
-  const { data: customFields = [] } = useQuery({
+  // Получение кастомных полей с улучшенной обработкой
+  const { data: customFieldsResponse, isLoading, error } = useQuery({
     queryKey: ['customFields'],
     queryFn: async () => {
-      const { data } = await api.get('/api/custom-fields');
-      return data.data || [];
+      try {
+        const response = await api.get('/api/custom-fields');
+        console.log('Custom fields response for export:', response);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching custom fields for export:', error);
+        throw error;
+      }
     },
   });
+
+  // Безопасное извлечение полей
+  const extractCustomFields = (response: any) => {
+    console.log('Extracting custom fields from:', response);
+    
+    if (response?.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    
+    if (Array.isArray(response)) {
+      return response;
+    }
+    
+    console.warn('Could not extract custom fields array from response:', response);
+    return [];
+  };
+
+  const customFields = extractCustomFields(customFieldsResponse);
+  console.log('Safe custom fields for export:', customFields);
 
   // Мутация для экспорта
   const exportMutation = useMutation({
@@ -66,9 +91,9 @@ const ExportData: React.FC = () => {
     );
   };
 
-  const handleSelectAllChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSelectAll(event.target.checked);
-    if (event.target.checked) {
+  const handleSelectAllToggle = () => {
+    setSelectAll((prev) => !prev);
+    if (!selectAll) {
       setSelectedFields([]);
     }
   };
@@ -77,6 +102,29 @@ const ExportData: React.FC = () => {
     exportMutation.mutate();
   };
 
+  // Состояние загрузки
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Загрузка полей...</Typography>
+      </Box>
+    );
+  }
+
+  // Обработка ошибки
+  if (error) {
+    return (
+      <Box p={4}>
+        <Alert severity="error">
+          Ошибка загрузки полей. Попробуйте обновить страницу.
+          <br />
+          <small>Детали ошибки: {error.message}</small>
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Paper sx={{ p: 3 }}>
@@ -84,12 +132,13 @@ const ExportData: React.FC = () => {
           Экспорт данных
         </Typography>
 
-        <Box sx={{ mt: 3 }}>
+        <Box sx={{ mb: 3 }}>
           <FormControl component="fieldset">
             <FormLabel component="legend">Формат экспорта</FormLabel>
             <RadioGroup
               value={format}
               onChange={(e) => setFormat(e.target.value as 'csv' | 'excel')}
+              row
             >
               <FormControlLabel value="csv" control={<Radio />} label="CSV" />
               <FormControlLabel value="excel" control={<Radio />} label="Excel" />
@@ -97,7 +146,7 @@ const ExportData: React.FC = () => {
           </FormControl>
         </Box>
 
-        <Box sx={{ mt: 3 }}>
+        <Box sx={{ mb: 3 }}>
           <FormControl component="fieldset">
             <FormLabel component="legend">Поля для экспорта</FormLabel>
             <FormGroup>
@@ -105,53 +154,54 @@ const ExportData: React.FC = () => {
                 control={
                   <Checkbox
                     checked={selectAll}
-                    onChange={handleSelectAllChange}
+                    onChange={handleSelectAllToggle}
                   />
                 }
-                label="Все поля"
+                label="Экспортировать все поля"
               />
-              
-              {!selectAll && (
-                <Box sx={{ ml: 3, mt: 1 }}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Стандартные поля:
-                  </Typography>
 
-                  <FormControlLabel
-                    control={<Checkbox checked disabled />}
-                    label="Штрихкод"
-                  />
-                  <FormControlLabel
-                    control={<Checkbox checked disabled />}
-                    label="Владелец"
-                  />
-                  <FormControlLabel
-                    control={<Checkbox checked disabled />}
-                    label="Дата создания"
-                  />
-                  
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }} gutterBottom>
-                    Кастомные поля:
+              {!selectAll && (
+                <Box sx={{ ml: 3, mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Выберите поля для экспорта:
                   </Typography>
-                  {customFields.map((field: any) => {
-                    // Безопасное извлечение данных поля
-                    const fieldData = field.attributes || field;
-                    const fieldId = field.id?.toString() || '';
-                    const fieldName = fieldData?.name || 'Без названия';
-                    
-                    return (
-                      <FormControlLabel
-                        key={fieldId}
-                        control={
-                          <Checkbox
-                            checked={selectedFields.includes(fieldId)}
-                            onChange={() => handleFieldToggle(fieldId)}
-                          />
-                        }
-                        label={fieldName}
-                      />
-                    );
-                  })}
+                  
+                  {!Array.isArray(customFields) ? (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      Ошибка формата данных полей. Обратитесь к администратору.
+                      <br />
+                      <small>Получен: {typeof customFields} вместо массива</small>
+                    </Alert>
+                  ) : customFields.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Нет доступных полей для экспорта
+                    </Typography>
+                  ) : (
+                    customFields.map((field: any) => {
+                      // Безопасное извлечение данных поля
+                      const fieldData = field?.attributes || field;
+                      const fieldId = field?.id?.toString() || '';
+                      const fieldName = fieldData?.name || 'Без названия';
+                      
+                      if (!fieldId) {
+                        console.warn('Invalid field for export:', field);
+                        return null;
+                      }
+                      
+                      return (
+                        <FormControlLabel
+                          key={fieldId}
+                          control={
+                            <Checkbox
+                              checked={selectedFields.includes(fieldId)}
+                              onChange={() => handleFieldToggle(fieldId)}
+                            />
+                          }
+                          label={fieldName}
+                        />
+                      );
+                    }).filter(Boolean) // Убираем null элементы
+                  )}
                 </Box>
               )}
             </FormGroup>
@@ -161,6 +211,8 @@ const ExportData: React.FC = () => {
         {exportMutation.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
             Произошла ошибка при экспорте данных
+            <br />
+            <small>{exportMutation.error?.message || 'Неизвестная ошибка'}</small>
           </Alert>
         )}
 
@@ -181,11 +233,28 @@ const ExportData: React.FC = () => {
               )
             }
             onClick={handleExport}
-            disabled={exportMutation.isPending || (!selectAll && selectedFields.length === 0)}
+            disabled={
+              exportMutation.isPending || 
+              (!selectAll && selectedFields.length === 0) ||
+              (!Array.isArray(customFields))
+            }
           >
             {exportMutation.isPending ? 'Экспорт...' : 'Экспортировать'}
           </Button>
         </Box>
+
+        {/* Отладочная информация в режиме разработки */}
+        {import.meta.env.DEV && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Debug: Fields type: {typeof customFields}, Array check: {Array.isArray(customFields) ? 'true' : 'false'}
+            </Typography>
+            <br />
+            <Typography variant="caption" color="text.secondary">
+              Fields length: {Array.isArray(customFields) ? customFields.length : 'N/A'}
+            </Typography>
+          </Box>
+        )}
       </Paper>
     </Box>
   );

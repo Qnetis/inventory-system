@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-
 import React, { useState } from 'react';
 import {
   Box,
@@ -21,6 +20,8 @@ import {
   TextField,
   Chip,
   Switch,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,23 +44,48 @@ const UserManagement: React.FC = () => {
     role: 1, // Default to authenticated role
   });
 
-  // Получение пользователей
-  const { data: users = [] } = useQuery({
+  // Получение пользователей с улучшенной обработкой
+  const { data: usersResponse, isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const { data } = await api.get('/api/users?populate=role');
-      return data;
+      try {
+        const response = await api.get('/api/users?populate=role');
+        console.log('Users API response:', response);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        throw error;
+      }
     },
   });
 
-  // Получение ролей
-  const { data: roles = [] } = useQuery({
+  // Получение ролей с улучшенной обработкой
+  const { data: rolesResponse, isLoading: rolesLoading, error: rolesError } = useQuery({
     queryKey: ['roles'],
     queryFn: async () => {
-      const { data } = await api.get('/api/users-permissions/roles');
-      return data.roles;
+      try {
+        const response = await api.get('/api/users-permissions/roles');
+        console.log('Roles API response:', response);
+        
+        if (response?.data?.roles && Array.isArray(response.data.roles)) {
+          return response.data.roles;
+        }
+        
+        console.warn('Unexpected roles response format:', response);
+        return [];
+      } catch (error) {
+        console.error('Error fetching roles:', error);
+        throw error;
+      }
     },
   });
+
+  // Безопасное извлечение данных
+  const users = Array.isArray(usersResponse) ? usersResponse : [];
+  const roles = Array.isArray(rolesResponse) ? rolesResponse : [];
+
+  console.log('Safe users:', users);
+  console.log('Safe roles:', roles);
 
   // Создание/обновление пользователя
   const saveMutation = useMutation({
@@ -123,6 +149,30 @@ const UserManagement: React.FC = () => {
     saveMutation.mutate(formData);
   };
 
+  // Состояния загрузки
+  if (usersLoading || rolesLoading) {
+    return (
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Обработка ошибок
+  if (usersError || rolesError) {
+    return (
+      <Box p={4}>
+        <Alert severity="error">
+          Ошибка загрузки данных. Попробуйте обновить страницу.
+          <br />
+          <small>
+            {usersError?.message || rolesError?.message || 'Неизвестная ошибка'}
+          </small>
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
@@ -148,32 +198,47 @@ const UserManagement: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {users.map((user: any) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.username}</TableCell>
-                <TableCell>{user.fullName || '-'}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.phone || '-'}</TableCell>
-                <TableCell>
-                  <Chip
-                    label={user.role?.name || 'User'}
-                    color={user.role?.type === 'admin' ? 'primary' : 'default'}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell align="right">
-                  <IconButton onClick={() => handleOpenDialog(user)}>
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => deleteMutation.mutate(user.id)}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+            {users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  Нет пользователей
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              users.map((user: any) => {
+                if (!user || !user.id) {
+                  console.warn('Invalid user data:', user);
+                  return null;
+                }
+
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.username || 'Без логина'}</TableCell>
+                    <TableCell>{user.fullName || '-'}</TableCell>
+                    <TableCell>{user.email || 'Без email'}</TableCell>
+                    <TableCell>{user.phone || '-'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.role?.name || 'User'}
+                        color={user.role?.type === 'admin' ? 'primary' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton onClick={() => handleOpenDialog(user)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => deleteMutation.mutate(user.id)}
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              }).filter(Boolean) // Убираем null элементы
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -226,10 +291,10 @@ const UserManagement: React.FC = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Typography>Администратор:</Typography>
               <Switch
-                checked={formData.role === roles.find((r: any) => r.type === 'admin')?.id}
+                checked={formData.role === roles.find((r: any) => r?.type === 'admin')?.id}
                 onChange={(e) => {
-                  const adminRole = roles.find((r: any) => r.type === 'admin');
-                  const userRole = roles.find((r: any) => r.type === 'authenticated');
+                  const adminRole = roles.find((r: any) => r?.type === 'admin');
+                  const userRole = roles.find((r: any) => r?.type === 'authenticated');
                   setFormData({
                     ...formData,
                     role: e.target.checked ? adminRole?.id : userRole?.id,
@@ -241,8 +306,12 @@ const UserManagement: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Отмена</Button>
-          <Button onClick={handleSave} variant="contained">
-            Сохранить
+          <Button 
+            onClick={handleSave} 
+            variant="contained"
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? 'Сохранение...' : 'Сохранить'}
           </Button>
         </DialogActions>
       </Dialog>
