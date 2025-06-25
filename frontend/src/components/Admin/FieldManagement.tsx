@@ -54,6 +54,8 @@ const FieldManagement: React.FC = () => {
     queryKey: ['customFields'],
     queryFn: async () => {
       try {
+            console.log('🚀 QUERY STARTING - about to fetch custom fields');
+
         const response = await api.get('/api/custom-fields?sort=order');
         console.log('Custom fields full response:', response);
         console.log('Custom fields response data:', response.data);
@@ -76,6 +78,10 @@ const FieldManagement: React.FC = () => {
         throw error;
       }
     },
+    enabled: true,
+      refetchOnMount: true,
+  refetchOnWindowFocus: true,
+  staleTime: 0,
   });
 
   // Дополнительная проверка на случай если fields не массив

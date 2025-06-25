@@ -90,9 +90,10 @@ const AdminPage: React.FC = () => {
       <TabPanel value={tabValue} index={0}>
         <UserManagement />
       </TabPanel>
-      <TabPanel value={tabValue} index={1}>
-        <FieldManagement />
-      </TabPanel>
+<TabPanel value={tabValue} index={1}>
+  {console.log('🚀 TabPanel 1 rendering')}
+  <FieldManagement />
+</TabPanel>
       <TabPanel value={tabValue} index={2}>
         <Statistics />
       </TabPanel>
