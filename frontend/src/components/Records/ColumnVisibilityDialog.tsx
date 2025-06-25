@@ -51,6 +51,12 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
     setLocalSelection(visibleColumns);
   }, [visibleColumns, open]);
 
+  // Безопасное извлечение полей
+  const safeCustomFields = Array.isArray(customFields) ? customFields : [];
+  
+  console.log('ColumnVisibilityDialog - customFields:', customFields);
+  console.log('ColumnVisibilityDialog - safeCustomFields:', safeCustomFields);
+
   const handleToggleField = (fieldId: string) => {
     setLocalSelection(prev => 
       prev.includes(fieldId)
@@ -60,7 +66,7 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
   };
 
   const handleSelectAll = () => {
-    const allFieldIds = customFields.map(field => field.id);
+    const allFieldIds = safeCustomFields.map(field => field.id).filter(Boolean);
     setLocalSelection(allFieldIds);
   };
 
@@ -105,7 +111,7 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
         <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
           <Typography variant="body2" color="text.secondary">
             Видимых столбцов: <strong>{localSelection.length + systemColumns.length}</strong> из{' '}
-            <strong>{customFields.length + systemColumns.length}</strong>
+            <strong>{safeCustomFields.length + systemColumns.length}</strong>
           </Typography>
         </Box>
 
@@ -139,14 +145,14 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="subtitle1">
-              Пользовательские поля ({customFields.length})
+              Пользовательские поля ({safeCustomFields.length})
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
                 size="small"
                 startIcon={<SelectAllIcon />}
                 onClick={handleSelectAll}
-                disabled={localSelection.length === customFields.length}
+                disabled={localSelection.length === safeCustomFields.length}
               >
                 Все
               </Button>
@@ -162,12 +168,17 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
           </Box>
 
           <FormGroup>
-            {customFields.length === 0 ? (
+            {safeCustomFields.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
                 Пользовательские поля не созданы
               </Typography>
             ) : (
-              customFields.map((field) => {
+              safeCustomFields.map((field) => {
+                if (!field || !field.id) {
+                  console.warn('Invalid field in ColumnVisibilityDialog:', field);
+                  return null;
+                }
+
                 const fieldData = field.attributes || field;
                 const isChecked = localSelection.includes(field.id);
                 
@@ -183,10 +194,10 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
                     }
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {fieldData.name}
+                        {fieldData.name || 'Без названия'}
                         <Chip 
                           size="small" 
-                          label={fieldData.fieldType} 
+                          label={fieldData.fieldType || 'TEXT'} 
                           variant="outlined"
                           sx={{ fontSize: '0.7rem', height: '20px' }}
                         />
@@ -203,7 +214,7 @@ const ColumnVisibilityDialog: React.FC<ColumnVisibilityDialogProps> = ({
                     }
                   />
                 );
-              })
+              }).filter(Boolean) // Убираем null элементы
             )}
           </FormGroup>
         </Box>
