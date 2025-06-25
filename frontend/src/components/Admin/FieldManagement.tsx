@@ -210,61 +210,63 @@ const FieldManagement: React.FC = () => {
           </TableHead>
           <TableBody>
             {safeFields.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  Нет созданных полей
-                </TableCell>
-              </TableRow>
-            ) : (
-              safeFields.map((field: any) => {
-                // Безопасное извлечение данных с поддержкой обоих форматов
-                const fieldData = field?.attributes || field;
-                const fieldId = field?.id;
-                
-                if (!fieldData || !fieldId) {
-                  console.warn('Invalid field data:', field);
-                  return null;
-                }
+  <TableRow>
+    <TableCell colSpan={6} align="center">
+      Нет созданных полей
+    </TableCell>
+  </TableRow>
+) : (
+  safeFields
+    .map((field: any) => {
+      // Безопасное извлечение данных с поддержкой обоих форматов
+      const fieldData = field?.attributes || field;
+      const fieldId = field?.id;
+      
+      if (!fieldData || !fieldId) {
+        console.warn('Invalid field data:', field);
+        return null;
+      }
 
-                return (
-                  <TableRow key={fieldId}>
-                    <TableCell>
-                      <DragIcon color="disabled" />
-                    </TableCell>
-                    <TableCell>{fieldData.name || 'Без названия'}</TableCell>
-                    <TableCell>{fieldData.fieldType || 'TEXT'}</TableCell>
-                    <TableCell>
-                      {fieldData.isRequired ? 'Да' : 'Нет'}
-                    </TableCell>
-                    <TableCell>
-                      {fieldData.fieldType === 'SELECT' && fieldData.options && Array.isArray(fieldData.options) && (
-                        <>
-                          {fieldData.options.map((opt: string, idx: number) => (
-                            <Chip 
-                              key={`${fieldId}-opt-${idx}`} 
-                              label={opt} 
-                              size="small" 
-                              sx={{ mr: 0.5, mb: 0.5 }} 
-                            />
-                          ))}
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton onClick={() => handleOpenDialog(field)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        onClick={() => deleteMutation.mutate(fieldId)}
-                        color="error"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+      return (
+        <TableRow key={fieldId}>
+          <TableCell>
+            <DragIcon color="disabled" />
+          </TableCell>
+          <TableCell>{fieldData.name || 'Без названия'}</TableCell>
+          <TableCell>{fieldData.fieldType || 'TEXT'}</TableCell>
+          <TableCell>
+            {fieldData.isRequired ? 'Да' : 'Нет'}
+          </TableCell>
+          <TableCell>
+            {fieldData.fieldType === 'SELECT' && fieldData.options && Array.isArray(fieldData.options) && (
+              <>
+                {fieldData.options.map((opt: string, idx: number) => (
+                  <Chip 
+                    key={`${fieldId}-opt-${idx}`} 
+                    label={opt} 
+                    size="small" 
+                    sx={{ mr: 0.5, mb: 0.5 }} 
+                  />
+                ))}
+              </>
             )}
+          </TableCell>
+          <TableCell align="right">
+            <IconButton onClick={() => handleOpenDialog(field)}>
+              <EditIcon />
+            </IconButton>
+            <IconButton
+              onClick={() => deleteMutation.mutate(fieldId)}
+              color="error"
+            >
+              <DeleteIcon />
+            </IconButton>
+          </TableCell>
+        </TableRow>
+      );
+    })
+    .filter(Boolean) // ← Добавьте эту строку!
+)}
           </TableBody>
         </Table>
       </TableContainer>
