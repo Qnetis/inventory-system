@@ -171,7 +171,7 @@ const FieldManagement: React.FC = () => {
         throw error;
       }
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (variables) => {
       console.log('✅ Delete successful for field ID:', variables);
       queryClient.invalidateQueries({ queryKey: ['customFields'] });
       setNotification({
