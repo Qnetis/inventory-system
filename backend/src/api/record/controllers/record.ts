@@ -269,153 +269,172 @@ module.exports = createCoreController('api::record.record', ({ strapi }) => ({
     
     return code + checksum;
   },
+// Обновленные методы для контроллера record.ts
+// Добавьте эти изменения в ваш существующий файл backend/src/api/record/controllers/record.ts
 
-  // Статистика для текущего пользователя
-  async getUserStatistics(ctx) {
-    try {
-      const user = ctx.state.user;
-      const { period = 'daily' } = ctx.query;
-      
-      const now = new Date();
-      let startDate;
-      
-      switch (period) {
-        case 'weekly':
-          const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
-          startDate = new Date(now.setDate(diff));
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'monthly':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        default: // daily
-          startDate = new Date();
-          startDate.setHours(0, 0, 0, 0);
-      }
-
-      const records = await strapi.documents('api::record.record').findMany({
-        filters: {
-          owner: user.id,
-          createdAt: {
-            $gte: startDate.toISOString(),
-          },
-        },
-        status: 'published'
-      });
-
-      // Получаем пользовательские поля для расчета сумм
-      const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
-        filters: { fieldType: 'MONEY' },
-        status: 'published'
-      });
-
-      let totalMoney = 0;
-      records.forEach((record: any) => {
-        if (record.dynamicData) {
-          customFields.forEach((field: any) => {
-            const value = record.dynamicData[field.id];
-            if (value && !isNaN(parseFloat(value))) {
-              totalMoney += parseFloat(value);
-            }
-          });
-        }
-      });
-
-      return {
-        data: {
-          user: user.username || user.email,
-          count: records.length,
-          totalMoney,
-          period,
-        },
-        meta: {}
-      };
-
-    } catch (error) {
-      console.error('Get user statistics error:', error);
-      ctx.throw(500, error.message);
+// Статистика для текущего пользователя (обновленный метод)
+async getUserStatistics(ctx) {
+  try {
+    const user = ctx.state.user;
+    const { period = 'daily' } = ctx.query;
+    
+    const now = new Date();
+    let startDate;
+    
+    switch (period) {
+      case 'weekly':
+        const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
+        startDate = new Date(now.setDate(diff));
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'monthly':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'all':
+        // Для "всё время" не устанавливаем фильтр по дате
+        startDate = null;
+        break;
+      default: // daily
+        startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
     }
-  },
 
-  // Статистика для всех пользователей (только для админов)
-  async getAllUsersStatistics(ctx) {
-    try {
-      const user = ctx.state.user;
-      
-      if (user.role?.type !== 'admin') {
-        return ctx.forbidden('Access denied. Admin role required.');
-      }
-      
-      const { period = 'daily' } = ctx.query;
-      
-      const now = new Date();
-      let startDate;
-      
-      switch (period) {
-        case 'weekly':
-          const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
-          startDate = new Date(now.setDate(diff));
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'monthly':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        default: // daily
-          startDate = new Date();
-          startDate.setHours(0, 0, 0, 0);
-      }
-
-      const records = await strapi.documents('api::record.record').findMany({
-        filters: {
-          createdAt: {
-            $gte: startDate.toISOString(),
-          },
+    // Условный фильтр - добавляем фильтр по дате только если startDate не null
+    const filters = {
+      owner: user.id,
+      ...(startDate && {
+        createdAt: {
+          $gte: startDate.toISOString(),
         },
-        populate: ['owner'],
-        status: 'published'
-      });
+      }),
+    };
 
-      const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
-        filters: { fieldType: 'MONEY' },
-        status: 'published'
-      });
+    const records = await strapi.documents('api::record.record').findMany({
+      filters,
+      status: 'published'
+    });
 
-      const userStats: { [key: string]: UserStatistic } = {};
+    // Получаем пользовательские поля для расчета сумм
+    const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
+      filters: { fieldType: 'MONEY' },
+      status: 'published'
+    });
 
-      records.forEach((record: any) => {
-        const username = record.owner?.username || record.owner?.email || 'Неизвестен';
-        
-        if (!userStats[username]) {
-          userStats[username] = {
-            user: username,
-            count: 0,
-            totalMoney: 0
-          };
-        }
-        
-        userStats[username].count++;
-        
-        if (record.dynamicData) {
-          customFields.forEach((field: any) => {
-            const value = record.dynamicData[field.id];
-            if (value && !isNaN(parseFloat(value))) {
-              userStats[username].totalMoney += parseFloat(value);
-            }
-          });
-        }
-      });
+    let totalMoney = 0;
+    records.forEach((record: any) => {
+      if (record.dynamicData) {
+        customFields.forEach((field: any) => {
+          const value = record.dynamicData[field.id];
+          if (value && !isNaN(parseFloat(value))) {
+            totalMoney += parseFloat(value);
+          }
+        });
+      }
+    });
 
-      return {
-        data: Object.values(userStats),
-        meta: { period }
-      };
+    return {
+      data: {
+        user: user.username || user.email,
+        count: records.length,
+        totalMoney,
+        period,
+      },
+      meta: {}
+    };
 
-    } catch (error) {
-      console.error('Get all users statistics error:', error);
-      ctx.throw(500, error.message);
+  } catch (error) {
+    console.error('Get user statistics error:', error);
+    ctx.throw(500, error.message);
+  }
+},
+
+// Статистика для всех пользователей (обновленный метод)
+async getAllUsersStatistics(ctx) {
+  try {
+    const user = ctx.state.user;
+    
+    if (user.role?.type !== 'admin') {
+      return ctx.forbidden('Access denied. Admin role required.');
     }
-  },
+    
+    const { period = 'daily' } = ctx.query;
+    
+    const now = new Date();
+    let startDate;
+    
+    switch (period) {
+      case 'weekly':
+        const diff = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1);
+        startDate = new Date(now.setDate(diff));
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'monthly':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'all':
+        // Для "всё время" не устанавливаем фильтр по дате
+        startDate = null;
+        break;
+      default: // daily
+        startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+    }
 
+    // Условный фильтр - добавляем фильтр по дате только если startDate не null
+    const filters = {
+      ...(startDate && {
+        createdAt: {
+          $gte: startDate.toISOString(),
+        },
+      }),
+    };
+
+    const records = await strapi.documents('api::record.record').findMany({
+      filters,
+      populate: ['owner'],
+      status: 'published'
+    });
+
+    const customFields = await strapi.documents('api::custom-field.custom-field').findMany({
+      filters: { fieldType: 'MONEY' },
+      status: 'published'
+    });
+
+    const userStats: { [key: string]: UserStatistic } = {};
+
+    records.forEach((record: any) => {
+      const username = record.owner?.username || record.owner?.email || 'Неизвестен';
+      
+      if (!userStats[username]) {
+        userStats[username] = {
+          user: username,
+          count: 0,
+          totalMoney: 0
+        };
+      }
+      
+      userStats[username].count++;
+      
+      if (record.dynamicData) {
+        customFields.forEach((field: any) => {
+          const value = record.dynamicData[field.id];
+          if (value && !isNaN(parseFloat(value))) {
+            userStats[username].totalMoney += parseFloat(value);
+          }
+        });
+      }
+    });
+
+    return {
+      data: Object.values(userStats),
+      meta: { period }
+    };
+
+  } catch (error) {
+    console.error('Get all users statistics error:', error);
+    ctx.throw(500, error.message);
+  }
+},
   // Экспорт данных (обновлено без inventoryNumber)
   async export(ctx) {
     try {

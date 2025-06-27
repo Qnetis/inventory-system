@@ -26,8 +26,7 @@ import {
   Save as SaveIcon,
   Cancel as CancelIcon,
   Delete as DeleteIcon,
-  Print as PrintIcon,
-  Bluetooth as BluetoothIcon,
+  Share as ShareIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
@@ -67,7 +66,7 @@ const RecordDetailPage: React.FC = () => {
       console.log('📡 Загружаем запись с ID:', id);
       return recordsApi.getById(id);
     },
-    enabled: !!id && id !== 'create' && id !== 'new',
+    enabled: !!id && id !== 'create' && id !== 'new'
   });
 
   // Загрузка кастомных полей
@@ -78,44 +77,6 @@ const RecordDetailPage: React.FC = () => {
 
   const record = recordData?.data;
   console.log('📋 Данные записи:', record);
-
-  // Генерация штрихкода
-  useEffect(() => {
-    if (record?.barcode) {
-      const canvas = document.createElement('canvas');
-      try {
-        JsBarcode(canvas, record.barcode, {
-          format: 'EAN13',
-          width: 2,
-          height: 80,
-          displayValue: true,
-          fontSize: 12,
-          margin: 10,
-        });
-        setBarcodeDataUrl(canvas.toDataURL());
-      } catch (error) {
-        console.error('Error generating barcode:', error);
-      }
-    }
-  }, [record?.barcode]);
-
-  // Заполнение формы при загрузке
-  useEffect(() => {
-    if (record) {
-      const formData: any = {
-        name: record.name || '',
-      };
-
-      // Добавляем динамические поля
-      if (record.dynamicData) {
-        Object.keys(record.dynamicData).forEach(fieldId => {
-          formData[`dynamicData.${fieldId}`] = record.dynamicData[fieldId];
-        });
-      }
-
-      reset(formData);
-    }
-  }, [record, reset]);
 
   // Мутации
   const updateMutation = useMutation({
@@ -141,35 +102,50 @@ const RecordDetailPage: React.FC = () => {
     },
   });
 
-  if (recordLoading || fieldsLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (recordError || !record) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">
-          {recordError?.message || 'Запись не найдена'}
-        </Alert>
-        <Button 
-          startIcon={<BackIcon />} 
-          onClick={() => navigate('/records')}
-          sx={{ mt: 2 }}
-        >
-          Вернуться к списку
-        </Button>
-      </Box>
-    );
-  }
-
   const fields = fieldsData?.data || [];
-  const isOwner = record.owner?.id === user?.id;
+  const isOwner = record?.owner?.id === user?.id;
   const isAdmin = user?.role?.type === 'admin';
   const canEdit = isOwner || isAdmin;
+
+  // Генерация штрихкода
+  useEffect(() => {
+    if (record?.barcode) {
+      try {
+        const canvas = document.createElement('canvas');
+        JsBarcode(canvas, record.barcode, {
+          format: "EAN13",
+          width: 2,
+          height: 80,
+          displayValue: true,
+          fontSize: 14,
+          margin: 10,
+          background: '#ffffff',
+          lineColor: '#000000'
+        });
+        setBarcodeDataUrl(canvas.toDataURL('image/png'));
+      } catch (error) {
+        console.error('Ошибка генерации штрихкода:', error);
+      }
+    }
+  }, [record?.barcode]);
+
+  // Заполнение формы при загрузке записи
+  useEffect(() => {
+    if (record) {
+      const formData: any = {
+        name: record.name || '',
+      };
+
+      // Заполняем динамические поля
+      if (record.dynamicData) {
+        Object.keys(record.dynamicData).forEach(fieldId => {
+          formData[`dynamicData.${fieldId}`] = record.dynamicData[fieldId];
+        });
+      }
+
+      reset(formData);
+    }
+  }, [record, reset]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -206,91 +182,101 @@ const RecordDetailPage: React.FC = () => {
     updateMutation.mutate(updateData);
   };
 
-
-const handlePrint = () => {
-  // Создаем скрытый элемент для печати
-  const printContent = document.createElement('div');
-  printContent.innerHTML = `
-    <div style="
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-      width: 100%;
-      box-sizing: border-box;
-    ">
-      <h2 style="margin-bottom: 20px;">${record?.name || 'Запись'}</h2>
-      <div style="margin: 10px 0; font-size: 14px;">
-        Штрихкод: ${record?.barcode}
-      </div>
-      <div style="margin: 20px 0;">
-        <img src="${barcodeDataUrl}" alt="Штрихкод" style="max-width: 300px;" />
-      </div>
-      <div style="margin: 10px 0; font-size: 14px;">
-        Инвентарный номер: ${record?.inventoryNumber || ''}
-      </div>
-      <div style="margin: 10px 0; font-size: 14px;">
-        Дата создания: ${record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale: ru }) : ''}
-      </div>
-    </div>
-  `;
-
-  // Добавляем стили для печати
-  const printStyles = document.createElement('style');
-  printStyles.textContent = `
-    @media print {
-      body * {
-        visibility: hidden;
-      }
-      #print-content, #print-content * {
-        visibility: visible;
-      }
-      #print-content {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-      }
-      @page {
-        margin: 10mm;
-        size: A4;
-      }
+  // Функция поделиться изображением штрихкода
+  const handleShare = async () => {
+    if (!record?.barcode) {
+      alert('Штрихкод не найден');
+      return;
     }
-  `;
 
-  // Добавляем элементы в документ
-  printContent.id = 'print-content';
-  document.head.appendChild(printStyles);
-  document.body.appendChild(printContent);
-
-  // Вызываем печать
-  window.print();
-
-  // Удаляем элементы после печати
-  setTimeout(() => {
-    document.head.removeChild(printStyles);
-    document.body.removeChild(printContent);
-  }, 100);
-};
-
-
-  const handleBluetoothPrint = async () => {
     try {
-      if ('bluetooth' in navigator) {
-        // Простая реализация для демонстрации
-        // В реальном проекте здесь должна быть интеграция с конкретным принтером
-        const device = await (navigator as any).bluetooth.requestDevice({
-          filters: [{ services: ['battery_service'] }] // Замените на реальный сервис принтера
-        });
-        
-        console.log('Bluetooth device:', device);
-        alert(`Подключение к устройству: ${device.name}\nШтрихкод: ${record?.barcode}`);
+      // Создаем canvas для штрихкода 25x50 мм (для качества используем 300 DPI)
+      const mmToPx = (mm: number) => (mm * 300) / 25.4; // 300 DPI для качественного изображения
+      const width = mmToPx(50); // 50 мм ширина
+      const height = mmToPx(25); // 25 мм высота
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      // Генерируем штрихкод с нужными параметрами
+      JsBarcode(canvas, record.barcode, {
+        format: "EAN13",
+        width: 3,
+        height: height * 0.7, // 70% высоты под сам штрихкод
+        displayValue: true,
+        fontSize: Math.min(width / 15, 24), // Адаптивный размер шрифта
+        margin: 10,
+        background: '#ffffff',
+        lineColor: '#000000'
+      });
+
+      // Конвертируем canvas в blob
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          }
+        }, 'image/png', 1.0);
+      });
+
+      // Создаем файл для отправки
+      const file = new File([blob], `barcode-${record.barcode}.png`, {
+        type: 'image/png',
+      });
+
+      const shareData: any = {
+        title: `Штрихкод ${record.barcode}`,
+        text: `Штрихкод: ${record.barcode}`,
+        files: [file]
+      };
+
+      // Проверяем поддержку Web Share API с файлами
+      if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        console.log('Успешно поделились штрихкодом');
       } else {
-        alert('Bluetooth не поддерживается в этом браузере');
+        // Fallback: скачиваем изображение или копируем в буфер обмена
+        if (navigator.clipboard && 'write' in navigator.clipboard) {
+          // Пытаемся скопировать изображение в буфер обмена
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                'image/png': blob
+              })
+            ]);
+            alert('Изображение штрихкода скопировано в буфер обмена');
+          } catch (clipboardError) {
+            console.error('Ошибка копирования в буфер обмена:', clipboardError);
+            // Fallback: скачиваем файл
+            downloadBarcodeImage(canvas, record.barcode);
+          }
+        } else {
+          // Последний fallback: скачиваем файл
+          downloadBarcodeImage(canvas, record.barcode);
+        }
       }
     } catch (error) {
-      console.error('Bluetooth error:', error);
-      alert('Ошибка подключения к Bluetooth устройству');
+      console.error('Ошибка при создании штрихкода:', error);
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Пользователь отменил действие - не показываем ошибку
+        return;
+      }
+      
+      alert('Не удалось поделиться штрихкодом');
     }
+  };
+
+  // Вспомогательная функция для скачивания изображения
+  const downloadBarcodeImage = (canvas: HTMLCanvasElement, barcode: string) => {
+    const link = document.createElement('a');
+    link.download = `barcode-${barcode}.png`;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    alert('Изображение штрихкода загружено в папку загрузок');
   };
 
   const formatFieldValue = (value: any, fieldType: string) => {
@@ -310,6 +296,31 @@ const handlePrint = () => {
         return value;
     }
   };
+
+  if (recordLoading || fieldsLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (recordError || !record) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">
+          {recordError?.message || 'Запись не найдена'}
+        </Alert>
+        <Button 
+          startIcon={<BackIcon />} 
+          onClick={() => navigate('/records')}
+          sx={{ mt: 2 }}
+        >
+          Вернуться к списку
+        </Button>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 3 }}>
@@ -359,19 +370,17 @@ const handlePrint = () => {
                   <Grid size={{ xs: 12 }}>
                     <TextField
                       label="Штрихкод (уникальный идентификатор)"
-                      value={record.barcode || ''}
+                      value={record?.barcode || ''}
                       fullWidth
                       disabled
                       variant="outlined"
                       helperText="Штрихкод генерируется автоматически и служит уникальным идентификатором записи"
                     />
                   </Grid>
-
-                
                 </Grid>
 
                 {/* Пользовательские поля */}
-                {fields.length > 0 && (
+                {fields && fields.length > 0 && (
                   <>
                     <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
                       Данные записи
@@ -379,27 +388,25 @@ const handlePrint = () => {
                     <Grid container spacing={2}>
                       {fields.map((field: any) => {
                         const fieldData = field.attributes || field;
-                        const value = record.dynamicData?.[field.id];
+                        const value = record?.dynamicData?.[field.id];
 
                         return (
                           <Grid size={{ xs: 12, sm: 6 }} key={field.id}>
                             {isEditing ? (
-                              // Редактирование поля
                               <>
-                                {fieldData.fieldType === 'TEXT' && (
+                                {fieldData.fieldType === 'STRING' && (
                                   <Controller
                                     name={`dynamicData.${field.id}`}
                                     control={control}
-                                    rules={{ required: fieldData.isRequired }}
+                                    rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
                                     render={({ field: controllerField }) => (
                                       <TextField
                                         {...controllerField}
                                         label={fieldData.name}
                                         fullWidth
-                                        variant="outlined"
-                                        required={fieldData.isRequired}
                                         error={!!errors[`dynamicData.${field.id}`]}
                                         helperText={errors[`dynamicData.${field.id}`]?.message as string}
+                                        required={fieldData.required}
                                       />
                                     )}
                                   />
@@ -409,17 +416,16 @@ const handlePrint = () => {
                                   <Controller
                                     name={`dynamicData.${field.id}`}
                                     control={control}
-                                    rules={{ required: fieldData.isRequired }}
+                                    rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
                                     render={({ field: controllerField }) => (
                                       <TextField
                                         {...controllerField}
                                         label={fieldData.name}
                                         type="number"
                                         fullWidth
-                                        variant="outlined"
-                                        required={fieldData.isRequired}
                                         error={!!errors[`dynamicData.${field.id}`]}
                                         helperText={errors[`dynamicData.${field.id}`]?.message as string}
+                                        required={fieldData.required}
                                       />
                                     )}
                                   />
@@ -429,20 +435,19 @@ const handlePrint = () => {
                                   <Controller
                                     name={`dynamicData.${field.id}`}
                                     control={control}
-                                    rules={{ required: fieldData.isRequired }}
+                                    rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
                                     render={({ field: controllerField }) => (
                                       <TextField
                                         {...controllerField}
                                         label={fieldData.name}
                                         type="number"
                                         fullWidth
-                                        variant="outlined"
-                                        required={fieldData.isRequired}
-                                        InputProps={{
-                                          endAdornment: <Typography>₽</Typography>
-                                        }}
                                         error={!!errors[`dynamicData.${field.id}`]}
                                         helperText={errors[`dynamicData.${field.id}`]?.message as string}
+                                        required={fieldData.required}
+                                        InputProps={{
+                                          endAdornment: '₽'
+                                        }}
                                       />
                                     )}
                                   />
@@ -452,9 +457,13 @@ const handlePrint = () => {
                                   <Controller
                                     name={`dynamicData.${field.id}`}
                                     control={control}
-                                    rules={{ required: fieldData.isRequired }}
+                                    rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
                                     render={({ field: controllerField }) => (
-                                      <FormControl fullWidth variant="outlined" required={fieldData.isRequired}>
+                                      <FormControl
+                                        fullWidth
+                                        error={!!errors[`dynamicData.${field.id}`]}
+                                        required={fieldData.required}
+                                      >
                                         <InputLabel>{fieldData.name}</InputLabel>
                                         <Select
                                           {...controllerField}
@@ -546,7 +555,7 @@ const handlePrint = () => {
                     Создатель
                   </Typography>
                   <Typography variant="body1">
-                    {record.owner?.username || record.owner?.email || 'Неизвестно'}
+                    {record?.owner?.username || record?.owner?.email || 'Неизвестно'}
                   </Typography>
                 </Box>
 
@@ -555,7 +564,7 @@ const handlePrint = () => {
                     Дата создания
                   </Typography>
                   <Typography variant="body1">
-                    {record.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
+                    {record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
                   </Typography>
                 </Box>
 
@@ -564,7 +573,7 @@ const handlePrint = () => {
                     Последнее изменение
                   </Typography>
                   <Typography variant="body1">
-                    {record.updatedAt ? format(new Date(record.updatedAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
+                    {record?.updatedAt ? format(new Date(record.updatedAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
                   </Typography>
                 </Box>
               </CardContent>
@@ -588,22 +597,14 @@ const handlePrint = () => {
                 </Box>
 
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 2 }}>
-                  {record.barcode}
+                  {record?.barcode}
                 </Typography>
 
                 <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
                   <Button
                     variant="outlined"
-                    startIcon={<PrintIcon />}
-                    onClick={handlePrint}
-                    size="small"
-                  >
-                    Печать
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<BluetoothIcon />}
-                    onClick={handleBluetoothPrint}
+                    startIcon={<ShareIcon />}
+                    onClick={handleShare}
                     size="small"
                   >
                     Поделиться

@@ -29,7 +29,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 
 const Statistics: React.FC = () => {
-  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  // Добавляем 'all' в тип периода
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
 
   // Получение статистики с улучшенной обработкой ошибок
   const { data: statisticsResponse, isLoading, error } = useQuery({
@@ -78,16 +79,19 @@ const Statistics: React.FC = () => {
   console.log('Final processed stats:', stats);
   console.log('Is stats an array?', Array.isArray(stats));
 
+  // Обновляем лейблы с добавлением "всё время"
   const periodLabels = {
     daily: 'за сегодня',
     weekly: 'за текущую неделю', 
     monthly: 'за текущий месяц',
+    all: 'за всё время',
   };
 
   const periodTitles = {
     daily: 'За день',
     weekly: 'За неделю',
     monthly: 'За месяц',
+    all: 'За всё время',
   };
 
   // Вычисления с защитой от ошибок
@@ -127,7 +131,7 @@ const Statistics: React.FC = () => {
 
   return (
     <Box>
-      {/* Переключатель периода */}
+      {/* Переключатель периода с добавлением кнопки "Всё время" */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
         <ToggleButtonGroup
           value={period}
@@ -147,6 +151,9 @@ const Statistics: React.FC = () => {
           </ToggleButton>
           <ToggleButton value="monthly" aria-label="месяц">
             Месяц
+          </ToggleButton>
+          <ToggleButton value="all" aria-label="всё время">
+            Всё время
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>
@@ -210,125 +217,63 @@ const Statistics: React.FC = () => {
           </Typography>
           
           {!Array.isArray(stats) ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              Ошибка формата данных статистики. Обратитесь к администратору.
-              <br />
-              <small>Получен: {typeof stats} вместо массива</small>
+            <Alert severity="info">
+              Данные не найдены или имеют неожиданный формат
             </Alert>
-          ) : null}
-
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>#</TableCell>
-                  <TableCell>Пользователь</TableCell>
-                  <TableCell align="right">Записей</TableCell>
-                  <TableCell align="right">Сумма</TableCell>
-                  <TableCell align="center">Статус</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {!Array.isArray(stats) || stats.length === 0 ? (
+          ) : safeStats.length === 0 ? (
+            <Alert severity="info">
+              Нет данных для отображения {periodLabels[period]}
+            </Alert>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      <Box py={4}>
-                        <Typography variant="body1" color="text.secondary">
-                          {!Array.isArray(stats) ? 'Ошибка формата данных' : 'Нет данных за выбранный период'}
+                    <TableCell><strong>Пользователь</strong></TableCell>
+                    <TableCell align="right"><strong>Записей</strong></TableCell>
+                    <TableCell align="right"><strong>Сумма</strong></TableCell>
+                    <TableCell align="center"><strong>Статус</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {safeStats.map((stat: any, index: number) => (
+                    <TableRow key={stat.user || index} hover>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {stat.user || 'Неизвестный пользователь'}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                          {!Array.isArray(stats) 
-                            ? 'Обратитесь к администратору' 
-                            : 'Попробуйте выбрать другой период или проверьте, есть ли записи в системе'
+                      </TableCell>
+                      <TableCell align="right">
+                        <Chip 
+                          label={stat.count || 0} 
+                          size="small" 
+                          color="primary"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="success.main">
+                          {typeof stat.totalMoney === 'number' 
+                            ? `${stat.totalMoney.toLocaleString('ru-RU')} ₽`
+                            : '0 ₽'
                           }
                         </Typography>
-                        {!Array.isArray(stats) && (
-                          <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
-                            Получен: {typeof stats} вместо массива
-                          </Typography>
-                        )}
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  stats.map((stat: any, index: number) => {
-                    // Дополнительная проверка каждого элемента
-                    if (!stat || typeof stat !== 'object') {
-                      console.warn('Invalid stat item:', stat);
-                      return null;
-                    }
-
-                    return (
-                      <TableRow key={stat.userId || index} hover>
-                        <TableCell>{index + 1}</TableCell>
-                        <TableCell>
-                          <Box>
-                            <Typography variant="body2" fontWeight="medium">
-                              {stat.user || 'Неизвестный пользователь'}
-                            </Typography>
-                            {stat.userId && (
-                              <Typography variant="caption" color="text.secondary">
-                                ID: {stat.userId}
-                              </Typography>
-                            )}
-                          </Box>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" fontWeight="medium">
-                            {stat.count || 0}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" fontWeight="medium">
-                            {(stat.totalMoney || 0).toLocaleString('ru-RU')} ₽
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="center">
-                          {(stat.count || 0) > 0 ? (
-                            <Chip 
-                              label="Активен" 
-                              color="success" 
-                              size="small" 
-                            />
-                          ) : (
-                            <Chip 
-                              label="Неактивен" 
-                              color="default" 
-                              size="small" 
-                            />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }).filter(Boolean) // Убираем null элементы
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={stat.count > 0 ? 'Активен' : 'Неактивен'} 
+                          color={stat.count > 0 ? 'success' : 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </Box>
       </Paper>
-
-      {/* Дополнительная информация */}
-      {Array.isArray(stats) && stats.length > 0 && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" color="text.secondary">
-            Последнее обновление: {new Date().toLocaleString('ru-RU')}
-          </Typography>
-        </Box>
-      )}
-
-      {/* Отладочная информация в режиме разработки */}
-      {import.meta.env.DEV && (
-        <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-          <Typography variant="caption" color="text.secondary">
-            Debug: Raw response type: {typeof statisticsResponse}, Stats type: {typeof stats}, Array check: {Array.isArray(stats) ? 'true' : 'false'}
-          </Typography>
-          <br />
-          <Typography variant="caption" color="text.secondary">
-            Stats length: {Array.isArray(stats) ? stats.length : 'N/A'}
-          </Typography>
-        </Box>
-      )}
     </Box>
   );
 };
