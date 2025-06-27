@@ -95,32 +95,93 @@ export const recordsApi = {
 };
 
 // API для пользовательских полей
+// Обновленная версия API для пользовательских полей с поддержкой Strapi 5
+
 export const fieldsApi = {
   getAll: async () => {
-    const response = await api.get('/api/custom-fields');
-    return response.data;
+    try {
+      console.log('📡 API: Getting all custom fields');
+      const response = await api.get('/api/custom-fields?sort=order');
+      console.log('📡 API: Custom fields response:', response);
+      return response.data;
+    } catch (error) {
+      console.error('📡 API: Error getting custom fields:', error);
+      throw error;
+    }
   },
   
   getById: async (id: string) => {
-    const response = await api.get(`/api/custom-fields/${id}`);
-    return response.data;
+    try {
+      console.log('📡 API: Getting custom field by ID:', id);
+      const response = await api.get(`/api/custom-fields/${id}`);
+      console.log('📡 API: Custom field response:', response);
+      return response.data;
+    } catch (error) {
+      console.error('📡 API: Error getting custom field:', error);
+      throw error;
+    }
   },
   
   create: async (data: any) => {
-    const response = await api.post('/api/custom-fields', { data });
-    return response.data;
+    try {
+      console.log('📡 API: Creating custom field with data:', data);
+      const response = await api.post('/api/custom-fields', { data });
+      console.log('📡 API: Create response:', response);
+      return response.data;
+    } catch (error) {
+      console.error('📡 API: Error creating custom field:', error);
+      throw error;
+    }
   },
   
   update: async (id: string, data: any) => {
-    const response = await api.put(`/api/custom-fields/${id}`, { data });
-    return response.data;
+    try {
+      console.log('📡 API: Updating custom field:', id, 'with data:', data);
+      const response = await api.put(`/api/custom-fields/${id}`, { data });
+      console.log('📡 API: Update response:', response);
+      return response.data;
+    } catch (error) {
+      console.error('📡 API: Error updating custom field:', error);
+      throw error;
+    }
   },
   
   delete: async (id: string) => {
-    const response = await api.delete(`/api/custom-fields/${id}`);
-    return response.data;
+    try {
+      console.log('📡 API: Deleting custom field with ID:', id);
+      
+      // Валидация ID
+      if (!id || id === 'undefined' || id === 'null') {
+        throw new Error('Invalid field ID provided');
+      }
+      
+      // Выполняем запрос на удаление
+      const response = await api.delete(`/api/custom-fields/${id}`);
+      console.log('📡 API: Delete response:', response);
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('📡 API: Error deleting custom field:', {
+        id,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      // Дополнительная информация для отладки
+      if (error.response) {
+        console.error('📡 API: Response error details:', {
+          headers: error.response.headers,
+          config: error.config
+        });
+      }
+      
+      throw error;
+    }
   }
 };
+
 
 // API для пользователей
 export const usersApi = {
