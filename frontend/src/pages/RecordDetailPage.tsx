@@ -213,90 +213,98 @@ const RecordDetailPage: React.FC = () => {
   };
 
   // Функция поделиться изображением штрихкода
-  const handleShare = async () => {
-    if (!record?.barcode) {
-      alert('Штрихкод не найден');
-      return;
+ // Функция поделиться изображением штрихкода
+const handleShare = async () => {
+  if (!record?.barcode) {
+    alert('Штрихкод не найден');
+    return;
+  }
+
+  try {
+    // Создаем canvas для штрихкода с точными размерами 50x25 пикселей
+    const width = 50;  // 50 пикселей ширина
+    const height = 25; // 25 пикселей высота
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    // Генерируем штрихкод с адаптированными параметрами для маленького размера
+    JsBarcode(canvas, record.barcode, {
+      format: "EAN13",
+      width: 1,              // Минимальная ширина линий для экономии места
+      height: height - 8,    // Высота штрихкода (оставляем место для текста)
+      displayValue: false,   // Отключаем отображение текста, так как места мало
+      margin: 1,             // Минимальные отступы
+      background: '#ffffff',
+      lineColor: '#000000'
+    });
+
+    // Если нужно добавить текст вручную (опционально)
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#000000';
+      ctx.font = '4px Arial';  // Очень маленький шрифт
+      ctx.textAlign = 'center';
+      ctx.fillText(record.barcode.slice(-4), width / 2, height - 1); // Последние 4 цифры внизу
     }
 
-    try {
-      // Создаем canvas для штрихкода 25x50 мм (для качества используем 300 DPI)
-      const mmToPx = (mm: number) => (mm * 300) / 25.4; // 300 DPI для качественного изображения
-      const width = mmToPx(50); // 50 мм ширина
-      const height = mmToPx(25); // 25 мм высота
+    // Конвертируем canvas в blob
+    const blob = await new Promise<Blob>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        }
+      }, 'image/png', 1.0);
+    });
 
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+    // Создаем файл для отправки
+    const file = new File([blob], `barcode-${record.barcode}-25x50.png`, {
+      type: 'image/png',
+    });
 
-      // Генерируем штрихкод с нужными параметрами
-      JsBarcode(canvas, record.barcode, {
-        format: "EAN13",
-        width: 3,
-        height: height * 0.7, // 70% высоты под сам штрихкод
-        displayValue: true,
-        fontSize: Math.min(width / 15, 24), // Адаптивный размер шрифта
-        margin: 10,
-        background: '#ffffff',
-        lineColor: '#000000'
-      });
+    const shareData: any = {
+      title: `Штрихкод ${record.barcode}`,
+      text: `Штрихкод: ${record.barcode}`,
+      files: [file]
+    };
 
-      // Конвертируем canvas в blob
-      const blob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          }
-        }, 'image/png', 1.0);
-      });
-
-      // Создаем файл для отправки
-      const file = new File([blob], `barcode-${record.barcode}.png`, {
-        type: 'image/png',
-      });
-
-      const shareData: any = {
-        title: `Штрихкод ${record.barcode}`,
-        text: `Штрихкод: ${record.barcode}`,
-        files: [file]
-      };
-
-      // Проверяем поддержку Web Share API с файлами
-      if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-        await navigator.share(shareData);
-        console.log('Успешно поделились штрихкодом');
-      } else {
-        // Fallback: скачиваем изображение или копируем в буфер обмена
-        if (navigator.clipboard && 'write' in navigator.clipboard) {
-          // Пытаемся скопировать изображение в буфер обмена
-          try {
-            await navigator.clipboard.write([
-              new ClipboardItem({
-                'image/png': blob
-              })
-            ]);
-            alert('Изображение штрихкода скопировано в буфер обмена');
-          } catch (clipboardError) {
-            console.error('Ошибка копирования в буфер обмена:', clipboardError);
-            // Fallback: скачиваем файл
-            downloadBarcodeImage(canvas, record.barcode);
-          }
-        } else {
-          // Последний fallback: скачиваем файл
+    // Проверяем поддержку Web Share API с файлами
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      await navigator.share(shareData);
+      console.log('Успешно поделились штрихкодом');
+    } else {
+      // Fallback: скачиваем изображение или копируем в буфер обмена
+      if (navigator.clipboard && 'write' in navigator.clipboard) {
+        // Пытаемся скопировать изображение в буфер обмена
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': blob
+            })
+          ]);
+          alert('Изображение штрихкода 25x50 пикселей скопировано в буфер обмена');
+        } catch (clipboardError) {
+          console.error('Ошибка копирования в буфер обмена:', clipboardError);
+          // Fallback: скачиваем файл
           downloadBarcodeImage(canvas, record.barcode);
         }
+      } else {
+        // Последний fallback: скачиваем файл
+        downloadBarcodeImage(canvas, record.barcode);
       }
-    } catch (error) {
-      console.error('Ошибка при создании штрихкода:', error);
-      
-      if (error instanceof Error && error.name === 'AbortError') {
-        // Пользователь отменил действие - не показываем ошибку
-        return;
-      }
-      
-      alert('Не удалось поделиться штрихкодом');
     }
-  };
+  } catch (error) {
+    console.error('Ошибка при создании штрихкода:', error);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      // Пользователь отменил действие - не показываем ошибку
+      return;
+    }
+    
+    alert('Не удалось поделиться штрихкодом');
+  }
+};
 
   // Функция отправки по Bluetooth (заглушка)
   const handleBluetoothSend = () => {
