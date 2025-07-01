@@ -274,33 +274,46 @@ export const RecordsPage: React.FC = () => {
     setOrderBy(property);
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedRecord(record);
-  };
+const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
+  console.log('🖱️ Menu click - record:', record);
+  console.log('📦 Menu click - barcode:', (record?.attributes || record)?.barcode);
+  setAnchorEl(event.currentTarget);
+  setSelectedRecord(record);
+};
 
   const handleMenuClose = () => {
     setAnchorEl(null);
     setSelectedRecord(null);
   };
 
-  const handleEdit = () => {
-    if (selectedRecord) {
-      navigate(`/records/${selectedRecord.id}`);
-    }
-    handleMenuClose();
-  };
+const handleEdit = () => {
+  if (selectedRecord) {
+    // ИСПРАВЛЕНИЕ: правильно получаем ID с учетом структуры данных
+    const recordId = selectedRecord.documentId || selectedRecord.id;
+    console.log('🔧 Edit - selectedRecord:', selectedRecord);
+    console.log('🆔 Edit - используем ID:', recordId);
+    navigate(`/records/${recordId}`);
+  }
+  handleMenuClose();
+};
 
-  const handleDelete = () => {
-    setDeleteDialogOpen(true);
-    handleMenuClose();
-  };
+const handleDelete = () => {
+  // ИСПРАВЛЕНИЕ: добавляем отладочную информацию
+  console.log('🗑️ Delete - selectedRecord:', selectedRecord);
+  const recordData = selectedRecord?.attributes || selectedRecord;
+  console.log('📦 Delete - barcode:', recordData?.barcode);
+  setDeleteDialogOpen(true);
+  handleMenuClose();
+};
 
-  const confirmDelete = () => {
-    if (selectedRecord) {
-      deleteMutation.mutate(selectedRecord.id);
-    }
-  };
+const confirmDelete = () => {
+  if (selectedRecord) {
+    // ИСПРАВЛЕНИЕ: правильно получаем ID для удаления
+    const recordId = selectedRecord.documentId || selectedRecord.id;
+    console.log('✅ Confirm delete - ID:', recordId);
+    deleteMutation.mutate(recordId);
+  }
+};
 
   const handleApplyFilters = (filters: any[]) => {
     console.log('🔍 RecordsPage - Применяем фильтры:', filters);
@@ -720,7 +733,7 @@ export const RecordsPage: React.FC = () => {
         onCancel={() => setDeleteDialogOpen(false)}
         onConfirm={confirmDelete}
         title="Удалить запись?"
-        message={`Вы уверены, что хотите удалить запись со штрихкодом "${selectedRecord?.barcode}"? Это действие нельзя отменить.`}
+        message={`Вы уверены, что хотите удалить запись со штрихкодом "${(selectedRecord?.attributes || selectedRecord)?.barcode}"? Это действие нельзя отменить.`}
         confirmText="Удалить"
         cancelText="Отмена"
         confirmColor="error"
