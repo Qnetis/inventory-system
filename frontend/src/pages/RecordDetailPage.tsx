@@ -223,16 +223,16 @@ const handleShare = async () => {
     // Генерируем штрихкод оптимального размера
     JsBarcode(canvas, record.barcode, {
       format: "EAN13",
-      width: 2,              // Ширина линии (2px для хорошей читаемости)
-      height: 80,            // Высота штрихкода (80px стандарт)
-      displayValue: true,    // Показываем числа под штрихкодом
-      fontSize: 16,          // Размер шрифта для чисел
-      margin: 10,            // Отступы вокруг штрихкода
+      width: 2,
+      height: 80,
+      displayValue: true,
+      fontSize: 16,
+      margin: 10,
       background: '#ffffff',
       lineColor: '#000000',
-      textMargin: 2,         // Отступ текста от штрихкода
-      fontOptions: "",       // Обычный шрифт
-      textAlign: "center"    // Выравнивание текста по центру
+      textMargin: 2,
+      fontOptions: "",
+      textAlign: "center"
     });
 
     console.log('Размер сгенерированного штрихкода:', canvas.width + 'x' + canvas.height);
@@ -248,43 +248,64 @@ const handleShare = async () => {
       }, 'image/png', 1.0);
     });
 
-    // Создаем файл
-    const file = new File([blob], `barcode-${record.barcode}.png`, {
-      type: 'image/png',
-    });
+    // Получаем Data URL для альтернативных методов
+    const dataUrl = canvas.toDataURL('image/png');
 
     // Определяем тип устройства
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isAndroid = /Android/i.test(navigator.userAgent);
-    const isMobile = isIOS || isAndroid;
 
     // Пробуем использовать Web Share API
     if (navigator.share) {
       try {
-        // Сначала пробуем с файлом
+        // Для Android сначала пробуем простой текстовый share
+        if (isAndroid) {
+          // Создаем временную ссылку для скачивания
+          const blobUrl = URL.createObjectURL(blob);
+          
+          // Пробуем базовый Web Share API с текстом
+          await navigator.share({
+            title: `Штрихкод ${record.barcode}`,
+            text: `Штрихкод: ${record.barcode}\nИнвентарный номер: ${record.inventoryNumber || 'Не указан'}`
+          });
+          
+          // После успешного share предлагаем сохранить изображение
+          setTimeout(() => {
+            if (confirm('Хотите также сохранить изображение штрихкода?')) {
+              const link = document.createElement('a');
+              link.href = blobUrl;
+              link.download = `barcode-${record.barcode}.png`;
+              link.click();
+            }
+            URL.revokeObjectURL(blobUrl);
+          }, 100);
+          
+          console.log('Поделились через Web Share API (Android)');
+          return;
+        }
+
+        // Для других платформ пробуем с файлом
+        const file = new File([blob], `barcode-${record.barcode}.png`, {
+          type: 'image/png',
+        });
+
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
             title: 'Штрихкод',
-            text: record.barcode
+            text: `Штрихкод: ${record.barcode}`
           });
           console.log('Поделились через Web Share API с файлом');
           return;
         }
 
-        // Если не поддерживаются файлы, создаем blob URL
-        const blobUrl = URL.createObjectURL(blob);
-        
-        // Пробуем поделиться URL
+        // Fallback на текстовый share
         await navigator.share({
           title: `Штрихкод ${record.barcode}`,
-          text: `Штрихкод: ${record.barcode}`,
-          url: blobUrl
+          text: `Штрихкод: ${record.barcode}\nИнвентарный номер: ${record.inventoryNumber || 'Не указан'}`
         });
         
-        // Очищаем URL после небольшой задержки
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-        console.log('Поделились через Web Share API с URL');
+        console.log('Поделились через Web Share API (текст)');
         return;
         
       } catch (error) {
@@ -293,10 +314,142 @@ const handleShare = async () => {
       }
     }
 
-    // Альтернативные методы для разных платформ
-    if (isIOS) {
-      // Для iOS создаем страницу с изображением
-      const dataUrl = canvas.toDataURL('image/png');
+    // Альтернативный метод для Android без Web Share API
+    if (isAndroid) {
+      // Создаем специальную страницу для Android
+      const shareWindow = window.open('', '_blank');
+      
+      if (shareWindow) {
+        shareWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Штрихкод ${record.barcode}</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
+                font-family: Arial, sans-serif;
+                text-align: center;
+              }
+              .container {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                max-width: 400px;
+                margin: 0 auto;
+              }
+              .barcode-img {
+                display: block;
+                margin: 20px auto;
+                max-width: 100%;
+                height: auto;
+                border: 1px solid #e0e0e0;
+                padding: 10px;
+                background: white;
+              }
+              .info {
+                margin: 20px 0;
+                padding: 15px;
+                background: #f0f0f0;
+                border-radius: 8px;
+                text-align: left;
+              }
+              .info-item {
+                margin: 10px 0;
+                font-size: 14px;
+              }
+              .info-label {
+                font-weight: bold;
+                color: #666;
+              }
+              .actions {
+                margin-top: 30px;
+              }
+              .btn {
+                display: inline-block;
+                padding: 12px 24px;
+                margin: 5px;
+                background: #1976d2;
+                color: white;
+                text-decoration: none;
+                border-radius: 6px;
+                font-weight: 500;
+                border: none;
+                font-size: 16px;
+                cursor: pointer;
+              }
+              .btn-secondary {
+                background: #757575;
+              }
+              .hint {
+                color: #666;
+                font-size: 14px;
+                margin-top: 20px;
+                line-height: 1.5;
+                padding: 15px;
+                background: #fff3cd;
+                border-radius: 8px;
+                border: 1px solid #ffeaa7;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h2>Штрихкод</h2>
+              <img src="${dataUrl}" alt="Barcode" class="barcode-img">
+              
+              <div class="info">
+                <div class="info-item">
+                  <span class="info-label">Штрихкод:</span> ${record.barcode}
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Инвентарный номер:</span> ${record.inventoryNumber || 'Не указан'}
+                </div>
+              </div>
+              
+              <div class="actions">
+                <button class="btn" onclick="
+                  const link = document.createElement('a');
+                  link.href = '${dataUrl}';
+                  link.download = 'barcode-${record.barcode}.png';
+                  link.click();
+                ">Сохранить изображение</button>
+                
+                <button class="btn btn-secondary" onclick="
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  const img = document.querySelector('.barcode-img');
+                  canvas.width = img.naturalWidth;
+                  canvas.height = img.naturalHeight;
+                  ctx.drawImage(img, 0, 0);
+                  canvas.toBlob(function(blob) {
+                    const item = new ClipboardItem({ 'image/png': blob });
+                    navigator.clipboard.write([item]).then(() => {
+                      alert('Изображение скопировано в буфер обмена');
+                    }).catch(() => {
+                      alert('Не удалось скопировать в буфер обмена');
+                    });
+                  }, 'image/png');
+                ">Копировать изображение</button>
+              </div>
+              
+              <div class="hint">
+                💡 Совет: Нажмите и удерживайте изображение, затем выберите "Поделиться" в контекстном меню браузера, или используйте кнопки выше.
+              </div>
+            </div>
+          </body>
+          </html>
+        `);
+        shareWindow.document.close();
+      }
+    }
+    
+    // Для iOS
+    else if (isIOS) {
       const newTab = window.open('', '_blank');
       
       if (newTab) {
@@ -324,17 +477,10 @@ const handleShare = async () => {
               }
               .barcode-img {
                 display: block;
-                margin: 20px auto 20px calc(auto + 5mm);
+                margin: 20px auto;
                 max-width: 100%;
                 height: auto;
                 border: 1px solid #ddd;
-              }
-              .barcode-number {
-                font-family: 'SF Mono', Monaco, monospace;
-                font-size: 18px;
-                color: #333;
-                margin: 10px 0;
-                word-break: break-all;
               }
               .hint {
                 color: #666;
@@ -342,25 +488,12 @@ const handleShare = async () => {
                 margin-top: 20px;
                 line-height: 1.5;
               }
-              .actions {
-                margin-top: 20px;
-              }
-              .btn {
-                display: inline-block;
-                padding: 12px 24px;
-                background: #007AFF;
-                color: white;
-                text-decoration: none;
-                border-radius: 8px;
-                font-weight: 500;
-                margin: 5px;
-              }
             </style>
           </head>
           <body>
             <div class="container">
               <h2>Штрихкод</h2>
-              <div class="barcode-number">${record.barcode}</div>
+              <div>Штрихкод: ${record.barcode}</div>
               <img src="${dataUrl}" alt="Barcode" class="barcode-img">
               <div class="hint">
                 Нажмите и удерживайте изображение,<br>
@@ -373,31 +506,10 @@ const handleShare = async () => {
         `);
         newTab.document.close();
       }
-      
-    } else if (isAndroid || isMobile) {
-      // Для Android используем прямое скачивание
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `barcode-${record.barcode}.png`;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-      }, 100);
-      
-      // Показываем уведомление
-      setTimeout(() => {
-        if (confirm('Штрихкод сохранен в загрузки. Открыть папку с загрузками?')) {
-          // Пытаемся открыть загрузки (работает не на всех устройствах)
-          window.open('content://downloads/', '_blank');
-        }
-      }, 1000);
-      
-    } else {
-      // Для десктопа - копируем в буфер обмена или скачиваем
+    }
+    
+    // Для десктопа
+    else {
       if (navigator.clipboard && navigator.clipboard.write) {
         try {
           await navigator.clipboard.write([
@@ -406,7 +518,6 @@ const handleShare = async () => {
           alert('Изображение штрихкода скопировано в буфер обмена');
         } catch (e) {
           console.error('Ошибка при копировании в буфер:', e);
-          // Fallback на скачивание
           downloadBarcodeImage(canvas, record.barcode);
         }
       } else {
