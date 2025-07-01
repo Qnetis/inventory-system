@@ -28,7 +28,15 @@ import {
   Tooltip,
   Badge,
   CircularProgress,
-  Paper,
+  Stack,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
+  useTheme,
+  useMediaQuery,
+  ListItemIcon,
+  ListItemText,
+
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -41,6 +49,7 @@ import {
   Delete as DeleteIcon,
   Person as PersonIcon,
   ViewColumn as ViewColumnIcon,
+
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -61,6 +70,8 @@ export const RecordsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role?.type === 'admin';
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Состояния
   const [page, setPage] = useState(0);
@@ -76,12 +87,11 @@ export const RecordsPage: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  
-  // НОВОЕ: Состояние для видимости столбцов
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState<null | HTMLElement>(null);
 
-  // Загрузка данных с улучшенной обработкой
+  // Загрузка данных
   const { data: recordsResponse, isLoading: recordsLoading, error: recordsError } = useQuery({
     queryKey: ['records', showAllRecords],
     queryFn: async () => {
@@ -100,7 +110,7 @@ export const RecordsPage: React.FC = () => {
     refetchOnMount: true,
   });
 
-  // Загрузка кастомных полей с улучшенной обработкой
+  // Загрузка кастомных полей
   const { data: fieldsResponse, isLoading: fieldsLoading, error: fieldsError } = useQuery({
     queryKey: ['customFields'],
     queryFn: async () => {
@@ -109,160 +119,132 @@ export const RecordsPage: React.FC = () => {
         console.log('Fields API response:', response);
         return response;
       } catch (error) {
-        console.error('Error fetching fields:', error);
+        console.error('Fields API error:', error);
         throw error;
       }
     },
-    staleTime: 5 * 60 * 1000,
   });
 
-  // Безопасное извлечение записей
-  const extractRecords = (response: any) => {
-    console.log('Extracting records from:', response);
+  // Безопасное извлечение данных
+  const records = useMemo(() => {
+    if (!recordsResponse) return [];
     
-    if (response?.data && Array.isArray(response.data)) {
-      return response.data;
+    if (recordsResponse.data) {
+      return Array.isArray(recordsResponse.data) ? recordsResponse.data : [];
     }
     
-    if (Array.isArray(response)) {
-      return response;
+    if (Array.isArray(recordsResponse)) {
+      return recordsResponse;
     }
     
-    console.warn('Could not extract records array from response:', response);
+    console.warn('Unexpected records response format:', recordsResponse);
     return [];
-  };
+  }, [recordsResponse]);
 
-  // Безопасное извлечение полей
-  const extractFields = (response: any) => {
-    console.log('Extracting fields from:', response);
+  const fields = useMemo(() => {
+    if (!fieldsResponse) return [];
     
-    if (response?.data && Array.isArray(response.data)) {
-      return response.data;
+    if (fieldsResponse.data) {
+      return Array.isArray(fieldsResponse.data) ? fieldsResponse.data : [];
     }
     
-    if (Array.isArray(response)) {
-      return response;
+    if (Array.isArray(fieldsResponse)) {
+      return fieldsResponse;
     }
     
-    console.warn('Could not extract fields array from response:', response);
+    console.warn('Unexpected fields response format:', fieldsResponse);
     return [];
-  };
+  }, [fieldsResponse]);
 
-  const records = extractRecords(recordsResponse);
-  const fields = extractFields(fieldsResponse);
-
-  console.log('Safe records:', records);
-  console.log('Safe fields:', fields);
-
-  // Инициализация видимых столбцов при загрузке полей
-  React.useEffect(() => {
-    if (Array.isArray(fields) && fields.length > 0 && visibleColumns.length === 0) {
-      const defaultVisible = fields.slice(0, 3).map((field: any) => field.id);
-      setVisibleColumns(defaultVisible);
-    }
-  }, [fields, visibleColumns.length]);
-
-  // Загрузка сохраненных предпочтений столбцов при запуске
+  // Инициализация видимых столбцов
   React.useEffect(() => {
     const savedColumns = localStorage.getItem('recordsVisibleColumns');
     if (savedColumns) {
-      try {
-        const parsed = JSON.parse(savedColumns);
-        if (Array.isArray(parsed)) {
-          setVisibleColumns(parsed);
-        }
-      } catch (error) {
-        console.error('Ошибка загрузки сохраненных столбцов:', error);
-      }
+      setVisibleColumns(JSON.parse(savedColumns));
+    } else if (fields.length > 0) {
+      // По умолчанию показываем первые 3 поля
+      setVisibleColumns(fields.slice(0, 3).map((f: any) => f.id));
     }
-  }, []);
+  }, [fields]);
 
   // Мутации
   const createMutation = useMutation({
-    mutationFn: recordsApi.create,
+    mutationFn: (data: any) => recordsApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
       setCreateDialogOpen(false);
     },
+    onError: (error) => {
+      console.error('Create error:', error);
+    },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: recordsApi.delete,
+    mutationFn: (id: string) => recordsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
       setDeleteDialogOpen(false);
       setSelectedRecord(null);
     },
+    onError: (error) => {
+      console.error('Delete error:', error);
+    },
   });
 
-  // Фильтрация записей
-  const filteredRecords = useMemo(() => {
-    if (!Array.isArray(records)) return [];
+  // Фильтрация и сортировка
+  const searchFilteredRecords = useMemo(() => {
+    if (!searchQuery) return records;
     
-    let filtered = records;
+    const lowerQuery = searchQuery.toLowerCase();
+    return records.filter((record: any) => {
+      const recordData = record.attributes || record;
+      
+      // Поиск по штрихкоду
+      if (recordData.barcode?.toLowerCase().includes(lowerQuery)) return true;
+      
+      // Поиск по динамическим полям
+      if (recordData.dynamicData) {
+        return Object.values(recordData.dynamicData).some((value: any) => 
+          String(value).toLowerCase().includes(lowerQuery)
+        );
+      }
+      
+      return false;
+    });
+  }, [records, searchQuery]);
 
-    // Поиск по тексту
-    if (searchQuery) {
-      filtered = filtered.filter((record: any) => {
-        const recordData = record.attributes || record;
-        const searchLower = searchQuery.toLowerCase();
-        
-        // Поиск по штрихкоду
-        if (recordData.barcode && recordData.barcode.toLowerCase().includes(searchLower)) {
-          return true;
-        }
-        
-        // Поиск по динамическим полям
-        if (recordData.dynamicData) {
-          return Object.values(recordData.dynamicData).some((value: any) =>
-            value && String(value).toLowerCase().includes(searchLower)
-          );
-        }
-        
-        return false;
-      });
-    }
+  const filteredRecords = useMemo(() => {
+    if (!activeFilters.length) return searchFilteredRecords;
+    return applyFiltersToData(searchFilteredRecords, activeFilters);
+  }, [searchFilteredRecords, activeFilters]);
 
-    // Применяем фильтры
-    if (activeFilters.length > 0) {
-      filtered = applyFiltersToData(filtered, activeFilters);
-    }
-
-    return filtered;
-  }, [records, searchQuery, activeFilters]);
-
-  // Сортировка
   const sortedRecords = useMemo(() => {
-    if (!Array.isArray(filteredRecords)) return [];
+    if (!orderBy) return filteredRecords;
     
     return [...filteredRecords].sort((a, b) => {
       const aData = a.attributes || a;
       const bData = b.attributes || b;
       
-      let aVal = aData[orderBy];
-      let bVal = bData[orderBy];
-
-      // Для динамических полей
-      if (orderBy.startsWith('dynamicData.')) {
-        const fieldId = orderBy.replace('dynamicData.', '');
-        aVal = aData.dynamicData?.[fieldId];
-        bVal = bData.dynamicData?.[fieldId];
+      let aValue = aData[orderBy];
+      let bValue = bData[orderBy];
+      
+      if (orderBy === 'owner') {
+        aValue = aData.owner?.data?.attributes?.fullName || aData.owner?.data?.attributes?.username || '';
+        bValue = bData.owner?.data?.attributes?.fullName || bData.owner?.data?.attributes?.username || '';
+      } else if (fields.some((f: any) => f.id === orderBy)) {
+        aValue = aData.dynamicData?.[orderBy] || '';
+        bValue = bData.dynamicData?.[orderBy] || '';
       }
-
-      if (aVal == null && bVal == null) return 0;
-      if (aVal == null) return order === 'asc' ? -1 : 1;
-      if (bVal == null) return order === 'asc' ? 1 : -1;
-
-      if (aVal < bVal) return order === 'asc' ? -1 : 1;
-      if (aVal > bVal) return order === 'asc' ? 1 : -1;
-      return 0;
+      
+      if (order === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
     });
-  }, [filteredRecords, orderBy, order]);
+  }, [filteredRecords, orderBy, order, fields]);
 
-  // Пагинация
   const paginatedRecords = useMemo(() => {
-    if (!Array.isArray(sortedRecords)) return [];
-    
     const start = page * rowsPerPage;
     return sortedRecords.slice(start, start + rowsPerPage);
   }, [sortedRecords, page, rowsPerPage]);
@@ -274,48 +256,36 @@ export const RecordsPage: React.FC = () => {
     setOrderBy(property);
   };
 
-const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
-  console.log('🐛 DEBUG handleMenuClick - record:', record);
-  console.log('🐛 DEBUG record.barcode:', record.barcode);
-  
-  setAnchorEl(event.currentTarget);
-  // Сохраняем record как есть, включая barcode
-  setSelectedRecord(record);
-};
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedRecord(record);
+  };
 
   const handleMenuClose = () => {
     setAnchorEl(null);
-    setSelectedRecord(null);
   };
 
-const handleEdit = () => {
-  if (selectedRecord) {
-    // ИСПРАВЛЕНИЕ: правильно получаем ID с учетом структуры данных
-    const recordId = selectedRecord.documentId || selectedRecord.id;
-    console.log('🔧 Edit - selectedRecord:', selectedRecord);
-    console.log('🆔 Edit - используем ID:', recordId);
-    navigate(`/records/${recordId}`);
-  }
-  handleMenuClose();
-};
+  const handleEdit = () => {
+    if (selectedRecord) {
+      const recordId = selectedRecord.documentId || selectedRecord.id;
+      navigate(`/records/${recordId}`);
+    }
+    handleMenuClose();
+  };
 
-const handleDelete = () => {
-  console.log('🐛 DEBUG handleDelete - selectedRecord:', selectedRecord);
-  console.log('🐛 DEBUG selectedRecord?.barcode:', selectedRecord?.barcode);
-  
-  setDeleteDialogOpen(true);
-  setAnchorEl(null); // Закрываем только меню
-  // НЕ вызываем handleMenuClose()!
-};
+  const handleDelete = () => {
+    handleMenuClose();
+    setDeleteDialogOpen(true);
+  };
 
-const confirmDelete = () => {
-  if (selectedRecord) {
-    // ИСПРАВЛЕНИЕ: правильно получаем ID для удаления
-    const recordId = selectedRecord.documentId || selectedRecord.id;
-    console.log('✅ Confirm delete - ID:', recordId);
-    deleteMutation.mutate(recordId);
-  }
-};
+  const confirmDelete = () => {
+    if (selectedRecord) {
+      const recordId = selectedRecord.documentId || selectedRecord.id;
+      console.log('✅ Confirm delete - ID:', recordId);
+      deleteMutation.mutate(recordId);
+    }
+  };
 
   const handleApplyFilters = (filters: any[]) => {
     console.log('🔍 RecordsPage - Применяем фильтры:', filters);
@@ -335,14 +305,8 @@ const confirmDelete = () => {
   };
 
   const handleRowClick = (record: any) => {
-    console.log('🖱️ Клик по строке записи:');
-    console.log('📋 Полные данные записи:', record);
-    console.log('🆔 record.id:', record.id);
-    console.log('📄 record.documentId:', record.documentId);
-    console.log('📦 record.barcode:', record.barcode);
-    
+    console.log('🖱️ Клик по строке записи:', record);
     const recordId = record.documentId || record.id;
-    console.log('🎯 Используемый ID для навигации:', recordId);
     
     if (recordId) {
       console.log('✅ Переход к записи:', `/records/${recordId}`);
@@ -353,10 +317,8 @@ const confirmDelete = () => {
     }
   };
 
-  // Обработчик изменения видимых столбцов
   const handleColumnsChange = (columns: string[]) => {
     setVisibleColumns(columns);
-    // Сохраняем в localStorage для запоминания предпочтений пользователя
     localStorage.setItem('recordsVisibleColumns', JSON.stringify(columns));
   };
 
@@ -378,10 +340,19 @@ const confirmDelete = () => {
     }
   };
 
+  // Обработчики мобильного меню
+  const handleActionMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    setActionMenuAnchor(event.currentTarget);
+  };
+
+  const handleActionMenuClose = () => {
+    setActionMenuAnchor(null);
+  };
+
   // Состояния загрузки
   if (recordsLoading || fieldsLoading) {
     return (
-      <Box display="flex" justifyContent="center" p={4}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
         <CircularProgress />
         <Typography sx={{ ml: 2 }}>Загрузка данных...</Typography>
       </Box>
@@ -391,7 +362,7 @@ const confirmDelete = () => {
   // Обработка ошибок
   if (recordsError || fieldsError) {
     return (
-      <Box p={4}>
+      <Box p={2}>
         <Alert severity="error">
           Ошибка загрузки данных. Попробуйте обновить страницу.
           <br />
@@ -404,50 +375,118 @@ const confirmDelete = () => {
   }
 
   return (
-    <Box>
-      {/* Заголовок и кнопки */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+    <Box sx={{ pb: isMobile ? 8 : 2 }}>
+      {/* Заголовок и кнопки - адаптивная версия */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between', 
+        alignItems: isMobile ? 'stretch' : 'center', 
+        mb: 3,
+        gap: isMobile ? 2 : 0,
+      }}>
+        <Typography variant={isMobile ? "h5" : "h4"} component="h1">
           Записи
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Tooltip title="Настроить столбцы">
+        
+        {/* Кнопки для десктопа */}
+        {!isMobile && (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Tooltip title="Настроить столбцы">
+              <Button
+                variant="outlined"
+                startIcon={<ViewColumnIcon />}
+                onClick={() => setColumnVisibilityOpen(true)}
+              >
+                Столбцы
+              </Button>
+            </Tooltip>
+            <Tooltip title="Экспорт данных">
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => setExportDialogOpen(true)}
+              >
+                Экспорт
+              </Button>
+            </Tooltip>
             <Button
-              variant="outlined"
-              startIcon={<ViewColumnIcon />}
-              onClick={() => setColumnVisibilityOpen(true)}
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setCreateDialogOpen(true)}
             >
-              Столбцы
+              Добавить запись
             </Button>
-          </Tooltip>
-          <Tooltip title="Экспорт данных">
+          </Box>
+        )}
+
+        {/* Кнопки для мобильных - компактное меню */}
+        {isMobile && (
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
             <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => setExportDialogOpen(true)}
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setCreateDialogOpen(true)}
+              size="small"
+              fullWidth
             >
-              Экспорт
+              Добавить
             </Button>
-          </Tooltip>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            Добавить запись
-          </Button>
-        </Box>
+            <IconButton
+              onClick={handleActionMenuClick}
+              sx={{ 
+                border: 1, 
+                borderColor: 'divider',
+                borderRadius: 1 
+              }}
+            >
+              <MoreVertIcon />
+            </IconButton>
+          </Box>
+        )}
       </Box>
 
-      {/* Панель управления */}
+      {/* Меню действий для мобильных */}
+      <Menu
+        anchorEl={actionMenuAnchor}
+        open={Boolean(actionMenuAnchor)}
+        onClose={handleActionMenuClose}
+      >
+        <MenuItem onClick={() => {
+          handleActionMenuClose();
+          setColumnVisibilityOpen(true);
+        }}>
+          <ListItemIcon>
+            <ViewColumnIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Настроить столбцы</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => {
+          handleActionMenuClose();
+          setExportDialogOpen(true);
+        }}>
+          <ListItemIcon>
+            <DownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Экспорт данных</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Панель управления - адаптивная */}
       <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <CardContent sx={{ pb: isMobile ? 2 : 3 }}>
+          <Stack 
+            direction={isMobile ? "column" : "row"} 
+            spacing={2}
+            alignItems={isMobile ? "stretch" : "center"}
+          >
             {/* Поиск */}
             <TextField
               placeholder="Поиск по штрихкоду или содержимому..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              size={isMobile ? "small" : "medium"}
+              fullWidth={isMobile}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -462,225 +501,327 @@ const confirmDelete = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ minWidth: 300, flexGrow: 1 }}
+              sx={{ 
+                minWidth: isMobile ? 'auto' : 300, 
+                flexGrow: isMobile ? 0 : 1 
+              }}
             />
 
-            {/* Кнопка фильтров */}
-            <Badge badgeContent={activeFilters.length} color="primary">
-              <Button
-                variant="outlined"
-                startIcon={<FilterIcon />}
-                onClick={() => setFiltersOpen(true)}
-              >
-                Фильтры
-              </Button>
-            </Badge>
+            {/* Фильтры и переключатель - в одну строку на мобильных */}
+            <Box sx={{ 
+              display: 'flex', 
+              gap: isMobile ? 1 : 2, 
+              alignItems: 'center',
+              justifyContent: isMobile ? 'space-between' : 'flex-start',
+              width: isMobile ? '100%' : 'auto',
+            }}>
+              {/* Кнопка фильтров */}
+              <Badge badgeContent={activeFilters.length} color="primary">
+                <Button
+                  variant="outlined"
+                  startIcon={<FilterIcon />}
+                  onClick={() => setFiltersOpen(true)}
+                  size={isMobile ? "small" : "medium"}
+                >
+                  Фильтры
+                </Button>
+              </Badge>
 
-            {/* Переключатель показа всех записей для админа */}
-            {isAdmin && (
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showAllRecords}
-                    onChange={(e) => handleShowAllToggle(e.target.checked)}
-                  />
-                }
-                label={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <PersonIcon fontSize="small" />
-                    <Typography variant="body2">
-                      Все записи
-                    </Typography>
-                  </Box>
-                }
-              />
-            )}
-          </Box>
+              {/* Переключатель показа всех записей для админа */}
+              {isAdmin && (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showAllRecords}
+                      onChange={(e) => handleShowAllToggle(e.target.checked)}
+                      size={isMobile ? "small" : "medium"}
+                    />
+                  }
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <PersonIcon fontSize="small" />
+                      <Typography variant={isMobile ? "caption" : "body2"}>
+                        {isMobile ? "Все" : "Показать все"}
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ m: 0 }}
+                />
+              )}
+            </Box>
+          </Stack>
 
-          {/* Активные фильтры */}
+          {/* Информация о фильтрах - компактная для мобильных */}
           {activeFilters.length > 0 && (
-            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Typography variant="body2" sx={{ mr: 1, alignSelf: 'center' }}>
+            <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary" sx={{ mr: 1 }}>
                 Активные фильтры:
               </Typography>
-              {activeFilters.map((filter, index) => (
+              {activeFilters.map((filter: any) => (
                 <Chip
-                  key={index}
-                  label={`${filter.fieldName}: ${filter.operator} ${filter.value}`}
+                  key={filter.id}
+                  label={`${fields.find((f: any) => f.id === filter.field)?.attributes?.name || filter.field}`}
                   size="small"
                   onDelete={() => {
-                    const newFilters = activeFilters.filter((_, i) => i !== index);
-                    setActiveFilters(newFilters);
+                    setActiveFilters(activeFilters.filter(f => f.id !== filter.id));
                   }}
                 />
               ))}
-              <Button
-                size="small"
-                variant="text"
-                onClick={() => setActiveFilters([])}
-              >
-                Очистить все
-              </Button>
             </Box>
           )}
         </CardContent>
       </Card>
 
-      {/* Таблица записей */}
+      {/* Таблица - адаптивная версия */}
       <Card>
-        <CardContent sx={{ p: 0 }}>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>
-                    <TableSortLabel
-                      active={orderBy === 'barcode'}
-                      direction={orderBy === 'barcode' ? order : 'asc'}
-                      onClick={() => handleSort('barcode')}
-                    >
-                      Штрихкод
-                    </TableSortLabel>
-                  </TableCell>
+        <CardContent sx={{ p: isMobile ? 1 : 2 }}>
+          {/* Мобильная версия - карточки */}
+          {isMobile ? (
+            <Stack spacing={1}>
+              {paginatedRecords.map((record: any) => {
+                if (!record || !record.id) return null;
 
-                  {/* Видимые кастомные поля */}
-                  {Array.isArray(fields) && fields
-                    .filter((field: any) => visibleColumns.includes(field.id))
-                    .map((field: any) => {
-                      const fieldData = field.attributes || field;
-                      return (
-                        <TableCell key={field.id}>
-                          <TableSortLabel
-                            active={orderBy === `dynamicData.${field.id}`}
-                            direction={orderBy === `dynamicData.${field.id}` ? order : 'asc'}
-                            onClick={() => handleSort(`dynamicData.${field.id}`)}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {fieldData.name}
-                              {fieldData.isRequired && (
-                                <Chip 
-                                  size="small" 
-                                  label="*" 
-                                  color="error" 
-                                  variant="outlined"
-                                  sx={{ minWidth: 'auto', width: 20, height: 20 }}
-                                />
-                              )}
-                            </Box>
-                          </TableSortLabel>
-                        </TableCell>
-                      );
-                    })}
+                const recordData = record.attributes || record;
+                const ownerData = recordData.owner?.data?.attributes || recordData.owner;
+                
+                // Показываем только первые 2 видимых поля на мобильных
+                const mobileVisibleFields = fields.filter((f: any) => 
+                  visibleColumns.includes(f.id)
+                ).slice(0, 2);
 
-                  <TableCell>Владелец</TableCell>
-                  <TableCell>
-                    <TableSortLabel
-                      active={orderBy === 'createdAt'}
-                      direction={orderBy === 'createdAt' ? order : 'asc'}
-                      onClick={() => handleSort('createdAt')}
-                    >
-                      Дата создания
-                    </TableSortLabel>
-                  </TableCell>
-                  <TableCell align="right">Действия</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {!Array.isArray(paginatedRecords) || paginatedRecords.length === 0 ? (
-                  <TableRow>
-                    <TableCell 
-                      colSpan={4 + (visibleColumns.length || 0)} 
-                      align="center"
-                      sx={{ py: 6 }}
-                    >
-                      <Box>
-                        <Typography variant="h6" color="text.secondary" gutterBottom>
-                          {!Array.isArray(records) ? 'Ошибка формата данных' : 'Записи не найдены'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {!Array.isArray(records) 
-                            ? 'Обратитесь к администратору'
-                            : 'Попробуйте изменить критерии поиска или фильтры'
-                          }
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedRecords.map((record: any) => {
-                    if (!record || !record.id) {
-                      console.warn('Invalid record:', record);
-                      return null;
-                    }
-
-                    const recordData = record.attributes || record;
-                    const ownerData = recordData.owner?.data?.attributes || recordData.owner;
-
-                    return (
-                      <TableRow
-                        key={record.id}
-                        hover
-                        onClick={() => handleRowClick(record)}
-                        sx={{ cursor: 'pointer' }}
-                      >
-                        <TableCell>
-                          <Typography variant="body2" fontFamily="monospace">
-                            {recordData.barcode || 'Без штрихкода'}
+                return (
+                  <Card 
+                    key={record.id}
+                    variant="outlined"
+                    onClick={() => handleRowClick(record)}
+                    sx={{ 
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      }
+                    }}
+                  >
+                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box sx={{ flexGrow: 1 }}>
+                          <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                            {recordData.barcode}
                           </Typography>
-                        </TableCell>
-                        
-                        {/* Показываем данные только для видимых полей */}
-                        {Array.isArray(fields) && fields
-                          .filter((field: any) => visibleColumns.includes(field.id))
-                          .map((field: any) => {
+                          
+                          {mobileVisibleFields.map((field: any) => {
                             const fieldData = field.attributes || field;
                             const value = recordData.dynamicData?.[field.id];
                             
+                            if (!value) return null;
+                            
                             return (
-                              <TableCell key={field.id}>
-                                <Typography 
-                                  variant="body2"
-                                  color={value ? 'text.primary' : 'text.secondary'}
-                                >
-                                  {formatFieldValue(value, fieldData.fieldType)}
-                                </Typography>
-                              </TableCell>
+                              <Typography key={field.id} variant="caption" display="block" color="text.secondary">
+                                {fieldData.name}: {formatFieldValue(value, fieldData.fieldType)}
+                              </Typography>
                             );
                           })}
-                        
-                        <TableCell>
-                          <Typography variant="body2">
-                            {ownerData?.fullName || ownerData?.username || '-'}
+                          
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {ownerData?.fullName || ownerData?.username} • {format(new Date(recordData.createdAt), 'dd.MM.yyyy', { locale: ru })}
                           </Typography>
-                        </TableCell>
+                        </Box>
                         
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">
-                            {recordData.createdAt ? format(new Date(recordData.createdAt), 'dd.MM.yyyy', {
-                              locale: ru,
-                            }) : '-'}
-                          </Typography>
-                        </TableCell>
-                        
-                        <TableCell align="right">
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMenuClick(e, record);
-                            }}
-                            size="small"
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMenuClick(e, record);
+                          }}
+                          size="small"
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                );
+              }).filter(Boolean)}
+              
+              {paginatedRecords.length === 0 && (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    Записи не найдены
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Попробуйте изменить критерии поиска или фильтры
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          ) : (
+            // Десктопная версия - таблица
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === 'barcode'}
+                          direction={orderBy === 'barcode' ? order : 'asc'}
+                          onClick={() => handleSort('barcode')}
+                        >
+                          Штрихкод
+                        </TableSortLabel>
+                      </TableCell>
+                      
+                      {fields
+                        .filter((field: any) => visibleColumns.includes(field.id))
+                        .map((field: any) => {
+                          const fieldData = field.attributes || field;
+                          return (
+                            <TableCell key={field.id}>
+                              <TableSortLabel
+                                active={orderBy === field.id}
+                                direction={orderBy === field.id ? order : 'asc'}
+                                onClick={() => handleSort(field.id)}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {fieldData.name}
+                                  {fieldData.isRequired && (
+                                    <Chip 
+                                      size="small" 
+                                      label="*" 
+                                      color="error" 
+                                      variant="outlined"
+                                      sx={{ minWidth: 'auto', width: 20, height: 20 }}
+                                    />
+                                  )}
+                                </Box>
+                              </TableSortLabel>
+                            </TableCell>
+                          );
+                        })}
+                      
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === 'owner'}
+                          direction={orderBy === 'owner' ? order : 'asc'}
+                          onClick={() => handleSort('owner')}
+                        >
+                          Владелец
+                        </TableSortLabel>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === 'createdAt'}
+                          direction={orderBy === 'createdAt' ? order : 'asc'}
+                          onClick={() => handleSort('createdAt')}
+                        >
+                          Дата создания
+                        </TableSortLabel>
+                      </TableCell>
+                      
+                      <TableCell align="right">Действия</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {paginatedRecords.length === 0 ? (
+                      <TableRow>
+                        <TableCell 
+                          colSpan={4 + fields.filter((f: any) => visibleColumns.includes(f.id)).length} 
+                          align="center"
+                          sx={{ py: 6 }}
+                        >
+                          <Box>
+                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                              {!Array.isArray(records) 
+                                ? 'Ошибка формата данных' 
+                                : 'Записи не найдены'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {!Array.isArray(records) 
+                                ? 'Обратитесь к администратору'
+                                : 'Попробуйте изменить критерии поиска или фильтры'
+                              }
+                            </Typography>
+                          </Box>
                         </TableCell>
                       </TableRow>
-                    );
-                  }).filter(Boolean) // Убираем null элементы
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                    ) : (
+                      paginatedRecords.map((record: any) => {
+                        if (!record || !record.id) {
+                          console.warn('Invalid record:', record);
+                          return null;
+                        }
+
+                        const recordData = record.attributes || record;
+                        const ownerData = recordData.owner?.data?.attributes || recordData.owner;
+
+                        return (
+                          <TableRow
+                            key={record.id}
+                            hover
+                            onClick={() => handleRowClick(record)}
+                            sx={{ cursor: 'pointer' }}
+                          >
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="monospace">
+                                {recordData.barcode || 'Без штрихкода'}
+                              </Typography>
+                            </TableCell>
+                            
+                            {/* Показываем данные только для видимых полей */}
+                            {Array.isArray(fields) && fields
+                              .filter((field: any) => visibleColumns.includes(field.id))
+                              .map((field: any) => {
+                                const fieldData = field.attributes || field;
+                                const value = recordData.dynamicData?.[field.id];
+                                
+                                return (
+                                  <TableCell key={field.id}>
+                                    <Typography 
+                                      variant="body2"
+                                      color={value ? 'text.primary' : 'text.secondary'}
+                                    >
+                                      {formatFieldValue(value, fieldData.fieldType)}
+                                    </Typography>
+                                  </TableCell>
+                                );
+                              })}
+                            
+                            <TableCell>
+                              <Typography variant="body2">
+                                {ownerData?.fullName || ownerData?.username || '-'}
+                              </Typography>
+                            </TableCell>
+                            
+                            <TableCell>
+                              <Typography variant="body2" color="text.secondary">
+                                {recordData.createdAt ?
+                                  format(new Date(recordData.createdAt), 'dd.MM.yyyy', {
+                                    locale: ru,
+                                  }) : '-'}
+                              </Typography>
+                            </TableCell>
+                            
+                            <TableCell align="right">
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMenuClick(e, record);
+                                }}
+                                size="small"
+                              >
+                                <MoreVertIcon />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }).filter(Boolean)
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
+          )}
           
+          {/* Пагинация - адаптивная */}
           <TablePagination
             component="div"
             count={Array.isArray(sortedRecords) ? sortedRecords.length : 0}
@@ -691,9 +832,24 @@ const confirmDelete = () => {
               setRowsPerPage(Number(e.target.value));
               setPage(0);
             }}
-            labelRowsPerPage="Записей на странице:"
-            labelDisplayedRows={({ from, to, count }) => `${from}-${to} из ${count}`}
-            rowsPerPageOptions={[10, 25, 50, 100]}
+            labelRowsPerPage={isMobile ? "На стр.:" : "Записей на странице:"}
+            labelDisplayedRows={({ from, to, count }) => 
+              isMobile ? `${from}-${to} / ${count}` : `${from}-${to} из ${count}`
+            }
+            rowsPerPageOptions={isMobile ? [10, 25] : [10, 25, 50, 100]}
+            sx={{
+              '.MuiTablePagination-toolbar': {
+                flexWrap: isMobile ? 'wrap' : 'nowrap',
+                justifyContent: isMobile ? 'center' : 'flex-end',
+              },
+              '.MuiTablePagination-selectLabel': {
+                m: isMobile ? 0 : 1,
+              },
+              '.MuiTablePagination-displayedRows': {
+                m: isMobile ? 0 : 1,
+                fontSize: isMobile ? '0.75rem' : '0.875rem',
+              },
+            }}
           />
         </CardContent>
       </Card>
@@ -707,7 +863,6 @@ const confirmDelete = () => {
         initialFilters={activeFilters}
       />
 
-      {/* Диалог настройки столбцов */}
       <ColumnVisibilityDialog
         open={columnVisibilityOpen}
         onClose={() => setColumnVisibilityOpen(false)}
@@ -730,15 +885,16 @@ const confirmDelete = () => {
         onSubmit={handleCreateRecord}
       />
 
-<ConfirmDialog
-  open={deleteDialogOpen}
-  onCancel={() => setDeleteDialogOpen(false)}
-  onConfirm={confirmDelete}
-  title="Удалить запись?"
-message={`Вы уверены, что хотите удалить запись ${selectedRecord?.barcode ? `со штрихкодом "${selectedRecord.barcode}"` : `с ID "${selectedRecord?.id}"`}? Это действие нельзя отменить.`}  confirmText="Удалить"
-  cancelText="Отмена"
-  confirmColor="error"
-/>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onCancel={() => setDeleteDialogOpen(false)}
+        onConfirm={confirmDelete}
+        title="Удалить запись?"
+        message={`Вы уверены, что хотите удалить запись ${selectedRecord?.barcode ? `со штрихкодом "${selectedRecord.barcode}"` : `с ID "${selectedRecord?.id}"`}? Это действие нельзя отменить.`}
+        confirmText="Удалить"
+        cancelText="Отмена"
+        confirmColor="error"
+      />
 
       {/* Контекстное меню */}
       <Menu
@@ -758,17 +914,29 @@ message={`Вы уверены, что хотите удалить запись $
         )}
       </Menu>
 
-      {/* Отладочная информация в режиме разработки */}
-      {import.meta.env.DEV && (
-        <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-          <Typography variant="caption" color="text.secondary">
-            Debug: Records type: {typeof records}, Array check: {Array.isArray(records) ? 'true' : 'false'}
-          </Typography>
-          <br />
-          <Typography variant="caption" color="text.secondary">
-            Records length: {Array.isArray(records) ? records.length : 'N/A'}, Fields length: {Array.isArray(fields) ? fields.length : 'N/A'}
-          </Typography>
-        </Box>
+      {/* Floating Action Button для мобильных */}
+      {isMobile && (
+        <SpeedDial
+          ariaLabel="Быстрые действия"
+          sx={{ position: 'fixed', bottom: 16, right: 16 }}
+          icon={<SpeedDialIcon />}
+        >
+          <SpeedDialAction
+            icon={<AddIcon />}
+            tooltipTitle="Добавить запись"
+            onClick={() => setCreateDialogOpen(true)}
+          />
+          <SpeedDialAction
+            icon={<FilterIcon />}
+            tooltipTitle="Фильтры"
+            onClick={() => setFiltersOpen(true)}
+          />
+          <SpeedDialAction
+            icon={<ViewColumnIcon />}
+            tooltipTitle="Столбцы"
+            onClick={() => setColumnVisibilityOpen(true)}
+          />
+        </SpeedDial>
       )}
     </Box>
   );
