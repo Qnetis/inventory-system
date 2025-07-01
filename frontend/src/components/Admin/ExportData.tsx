@@ -62,24 +62,41 @@ const ExportData: React.FC = () => {
   console.log('Safe custom fields for export:', customFields);
 
   // Мутация для экспорта
-  const exportMutation = useMutation({
+ const exportMutation = useMutation({
     mutationFn: async () => {
-      const fields = selectAll ? [] : selectedFields;
+      const selectedFieldsToSend = selectAll ? [] : selectedFields;
       const { data } = await api.post(
         '/api/records/export',
-        { format, fields },
-        { responseType: 'blob' }
+        { 
+          format, 
+          selectedFields: selectedFieldsToSend 
+        },
+        { 
+          responseType: 'blob' 
+        }
       );
       
+      // Определяем тип файла
+      const mimeType = format === 'csv' 
+        ? 'text/csv;charset=utf-8' 
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      
+      // Создаем blob с правильным типом
+      const blob = new Blob([data], { type: mimeType });
+      
       // Создаем ссылку для скачивания
-      const url = window.URL.createObjectURL(new Blob([data]));
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `export_${new Date().toISOString().split('T')[0]}.${format}`);
+      const extension = format === 'csv' ? 'csv' : 'xlsx';
+      link.setAttribute('download', `export_${new Date().toISOString().split('T')[0]}.${extension}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+    },
+    onError: (error) => {
+      console.error('Export error:', error);
     },
   });
 
