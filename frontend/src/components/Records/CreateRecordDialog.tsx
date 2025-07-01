@@ -8,20 +8,16 @@ import {
   DialogActions,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   FormControlLabel,
   Checkbox,
   Box,
   Typography,
-  FormHelperText,
   CircularProgress,
   useTheme,
   useMediaQuery,
   IconButton,
   Slide,
+  Autocomplete,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -174,7 +170,6 @@ const CreateRecordDialog: React.FC<CreateRecordDialogProps> = ({
                           error={!!errors[fieldName]}
                           helperText={errors[fieldName]?.message as string}
                           size={isMobile ? "small" : "medium"}
-                          autoComplete="off"
                         />
                       )}
                     />
@@ -190,7 +185,7 @@ const CreateRecordDialog: React.FC<CreateRecordDialogProps> = ({
                       rules={{ 
                         required: fieldData.isRequired ? 'Это поле обязательно' : false,
                         pattern: {
-                          value: /^\d+(\.\d{0,2})?$/,
+                          value: /^\d+(\.\d+)?$/,
                           message: 'Введите корректную сумму'
                         }
                       }}
@@ -203,58 +198,49 @@ const CreateRecordDialog: React.FC<CreateRecordDialogProps> = ({
                           required={fieldData.isRequired}
                           error={!!errors[fieldName]}
                           helperText={errors[fieldName]?.message as string}
-                          InputProps={{
-                            inputProps: { 
-                              step: 0.01,
-                              min: 0 
-                            }
-                          }}
                           size={isMobile ? "small" : "medium"}
-                          autoComplete="off"
+                          InputProps={{
+                            endAdornment: <Typography variant="body2" color="text.secondary">₽</Typography>
+                          }}
                         />
                       )}
                     />
                   );
                   
                 case 'SELECT':
-                  return (
-                    <Controller
-                      key={field.id}
-                      name={fieldName}
-                      control={control}
-                      defaultValue=""
-                      rules={{ required: fieldData.isRequired ? 'Это поле обязательно' : false }}
-                      render={({ field: formField }) => (
-                        <FormControl 
-                          fullWidth 
-                          error={!!errors[fieldName]}
-                          size={isMobile ? "small" : "medium"}
-                        >
-                          <InputLabel required={fieldData.isRequired}>
-                            {fieldData.name}
-                          </InputLabel>
-                          <Select
-                            {...formField}
-                            label={fieldData.name}
-                          >
-                            <MenuItem value="">
-                              <em>Не выбрано</em>
-                            </MenuItem>
-                            {fieldData.options?.map((option: string) => (
-                              <MenuItem key={option} value={option}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                          {errors[fieldName] && (
-                            <FormHelperText>
-                              {errors[fieldName]?.message as string}
-                            </FormHelperText>
-                          )}
-                        </FormControl>
-                      )}
-                    />
-                  );
+  return (
+    <Controller
+      key={field.id}
+      name={fieldName}
+      control={control}
+      defaultValue=""
+      rules={{ required: fieldData.isRequired ? 'Это поле обязательно' : false }}
+      render={({ field: formField }) => (
+        <Autocomplete
+          value={formField.value || null}
+          onChange={(_, newValue) => {
+            formField.onChange(newValue || '');
+          }}
+          options={fieldData.options || []}
+          getOptionLabel={(option) => option || ''}
+          size={isMobile ? "small" : "medium"}
+          fullWidth
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={fieldData.name}
+              required={fieldData.isRequired}
+              error={!!errors[fieldName]}
+              helperText={errors[fieldName]?.message as string}
+              placeholder="Начните вводить для поиска..."
+            />
+          )}
+          noOptionsText="Ничего не найдено"
+          autoHighlight
+        />
+      )}
+    />
+  );
                   
                 case 'CHECKBOX':
                   return (

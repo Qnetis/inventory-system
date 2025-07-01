@@ -12,9 +12,6 @@ import {
   CardContent,
   CircularProgress,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
   MenuItem,
   FormControlLabel,
   Checkbox,
@@ -23,7 +20,8 @@ import {
   useMediaQuery,
   Menu,
   Stack,
-  Divider
+  Divider,
+  Autocomplete,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -691,37 +689,38 @@ const handleShare = async () => {
                                     )}
                                   />
                                 )}
-                                {fieldData.fieldType === 'SELECT' && (
-                                  <Controller
-                                    name={`dynamicData.${field.id}`}
-                                    control={control}
-                                    rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
-                                    render={({ field: controllerField }) => (
-                                      <FormControl 
-                                        fullWidth 
-                                        error={!!errors[`dynamicData.${field.id}`]}
-                                        size={isMobile ? "small" : "medium"}
-                                      >
-                                        <InputLabel required={fieldData.required}>
-                                          {fieldData.name}
-                                        </InputLabel>
-                                        <Select
-                                          {...controllerField}
-                                          label={fieldData.name}
-                                        >
-                                          <MenuItem value="">
-                                            <em>Не выбрано</em>
-                                          </MenuItem>
-                                          {fieldData.options?.map((option: string) => (
-                                            <MenuItem key={option} value={option}>
-                                              {option}
-                                            </MenuItem>
-                                          ))}
-                                        </Select>
-                                      </FormControl>
-                                    )}
-                                  />
-                                )}
+{fieldData.fieldType === 'SELECT' && (
+  <Controller
+    name={`dynamicData.${field.id}`}
+    control={control}
+    defaultValue=""
+    rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
+    render={({ field: controllerField }) => (
+      <Autocomplete
+        value={controllerField.value || null}
+        onChange={(_, newValue) => {
+          controllerField.onChange(newValue || '');
+        }}
+        options={fieldData.options || []}
+        getOptionLabel={(option) => option || ''}
+        size={isMobile ? "small" : "medium"}
+        fullWidth
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={fieldData.name}
+            required={fieldData.required}
+            error={!!errors[`dynamicData.${field.id}`]}
+            helperText={errors[`dynamicData.${field.id}`]?.message as string || ''}
+            placeholder="Начните вводить для поиска..."
+          />
+        )}
+        noOptionsText="Ничего не найдено"
+        autoHighlight
+      />
+    )}
+  />
+)}
                                 {fieldData.fieldType === 'CHECKBOX' && (
                                   <Controller
                                     name={`dynamicData.${field.id}`}
