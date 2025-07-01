@@ -275,9 +275,11 @@ export const RecordsPage: React.FC = () => {
   };
 
 const handleMenuClick = (event: React.MouseEvent<HTMLElement>, record: any) => {
-  console.log('🖱️ Menu click - record:', record);
-  console.log('📦 Menu click - barcode:', (record?.attributes || record)?.barcode);
+  console.log('🐛 DEBUG handleMenuClick - record:', record);
+  console.log('🐛 DEBUG record.barcode:', record.barcode);
+  
   setAnchorEl(event.currentTarget);
+  // Сохраняем record как есть, включая barcode
   setSelectedRecord(record);
 };
 
@@ -298,12 +300,12 @@ const handleEdit = () => {
 };
 
 const handleDelete = () => {
-  // ИСПРАВЛЕНИЕ: добавляем отладочную информацию
-  console.log('🗑️ Delete - selectedRecord:', selectedRecord);
-  const recordData = selectedRecord?.attributes || selectedRecord;
-  console.log('📦 Delete - barcode:', recordData?.barcode);
+  console.log('🐛 DEBUG handleDelete - selectedRecord:', selectedRecord);
+  console.log('🐛 DEBUG selectedRecord?.barcode:', selectedRecord?.barcode);
+  
   setDeleteDialogOpen(true);
-  handleMenuClose();
+  setAnchorEl(null); // Закрываем только меню
+  // НЕ вызываем handleMenuClose()!
 };
 
 const confirmDelete = () => {
@@ -728,16 +730,15 @@ const confirmDelete = () => {
         onSubmit={handleCreateRecord}
       />
 
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onCancel={() => setDeleteDialogOpen(false)}
-        onConfirm={confirmDelete}
-        title="Удалить запись?"
-        message={`Вы уверены, что хотите удалить запись со штрихкодом "${(selectedRecord?.attributes || selectedRecord)?.barcode}"? Это действие нельзя отменить.`}
-        confirmText="Удалить"
-        cancelText="Отмена"
-        confirmColor="error"
-      />
+<ConfirmDialog
+  open={deleteDialogOpen}
+  onCancel={() => setDeleteDialogOpen(false)}
+  onConfirm={confirmDelete}
+  title="Удалить запись?"
+message={`Вы уверены, что хотите удалить запись ${selectedRecord?.barcode ? `со штрихкодом "${selectedRecord.barcode}"` : `с ID "${selectedRecord?.id}"`}? Это действие нельзя отменить.`}  confirmText="Удалить"
+  cancelText="Отмена"
+  confirmColor="error"
+/>
 
       {/* Контекстное меню */}
       <Menu
