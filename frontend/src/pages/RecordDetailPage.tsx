@@ -213,7 +213,6 @@ const RecordDetailPage: React.FC = () => {
   };
 
   // Функция поделиться изображением штрихкода
- // Функция поделиться изображением штрихкода
 const handleShare = async () => {
   if (!record?.barcode) {
     alert('Штрихкод не найден');
@@ -221,33 +220,37 @@ const handleShare = async () => {
   }
 
   try {
-    // Создаем canvas для штрихкода с точными размерами 50x25 пикселей
-    const width = 50;  // 50 пикселей ширина
-    const height = 25; // 25 пикселей высота
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-
-    // Генерируем штрихкод с адаптированными параметрами для маленького размера
-    JsBarcode(canvas, record.barcode, {
+    // Создаем временный canvas для генерации штрихкода
+    const tempCanvas = document.createElement('canvas');
+    
+    // Сначала генерируем штрихкод на временном canvas
+    JsBarcode(tempCanvas, record.barcode, {
       format: "EAN13",
-      width: 1,              // Минимальная ширина линий для экономии места
-      height: height - 8,    // Высота штрихкода (оставляем место для текста)
-      displayValue: false,   // Отключаем отображение текста, так как места мало
-      margin: 1,             // Минимальные отступы
+      width: 1,              // Минимальная ширина линий
+      height: 20,            // Высота штрихкода
+      displayValue: false,   // Отключаем отображение текста
+      margin: 0,             // Убираем отступы
       background: '#ffffff',
       lineColor: '#000000'
     });
 
-    // Если нужно добавить текст вручную (опционально)
-    const ctx = canvas.getContext('2d');
+    // Создаем финальный canvas с точными размерами 50x25 пикселей
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = 50;  // 50 пикселей ширина
+    finalCanvas.height = 25; // 25 пикселей высота
+
+    const ctx = finalCanvas.getContext('2d');
     if (ctx) {
-      ctx.fillStyle = '#000000';
-      ctx.font = '4px Arial';  // Очень маленький шрифт
-      ctx.textAlign = 'center';
-      ctx.fillText(record.barcode.slice(-4), width / 2, height - 1); // Последние 4 цифры внизу
+      // Заливаем белым фоном
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 50, 25);
+      
+      // Масштабируем и вписываем штрихкод в финальный canvas
+      ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 
+                    2, 2, 46, 21); // Оставляем небольшие отступы
     }
+
+    const canvas = finalCanvas; // Используем финальный canvas для дальнейшей обработки
 
     // Конвертируем canvas в blob
     const blob = await new Promise<Blob>((resolve) => {
