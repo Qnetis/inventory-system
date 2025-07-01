@@ -213,6 +213,9 @@ const RecordDetailPage: React.FC = () => {
   };
 
   // Функция поделиться изображением штрихкода
+// Функция поделиться изображением штрихкода
+// Функция поделиться изображением штрихкода
+// Альтернативная версия с использованием Blob URL
 const handleShare = async () => {
   if (!record?.barcode) {
     alert('Штрихкод не найден');
@@ -223,89 +226,215 @@ const handleShare = async () => {
     // Создаем временный canvas для генерации штрихкода
     const tempCanvas = document.createElement('canvas');
     
-    // Сначала генерируем штрихкод на временном canvas
+    // Генерируем штрихкод
     JsBarcode(tempCanvas, record.barcode, {
       format: "EAN13",
-      width: 1,              // Минимальная ширина линий
-      height: 20,            // Высота штрихкода
-      displayValue: false,   // Отключаем отображение текста
-      margin: 0,             // Убираем отступы
+      width: 0.5,
+      height: 20,            // Уменьшаем высоту для горизонтального формата
+      displayValue: false,
+      margin: 0,
       background: '#ffffff',
       lineColor: '#000000'
     });
 
-    // Создаем финальный canvas с точными размерами 50x25 пикселей
+    // Создаем финальный canvas 50x25
     const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = 50;  // 50 пикселей ширина
-    finalCanvas.height = 25; // 25 пикселей высота
+    finalCanvas.width = 50;   // ширина 50
+    finalCanvas.height = 25;  // высота 25
 
     const ctx = finalCanvas.getContext('2d');
     if (ctx) {
-      // Заливаем белым фоном
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, 50, 25);
+      ctx.imageSmoothingEnabled = false;
       
-      // Масштабируем и вписываем штрихкод в финальный canvas
-      ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 
-                    2, 2, 46, 21); // Оставляем небольшие отступы
+      // Обновляем расчеты для нового размера
+      const scale = Math.min(48 / tempCanvas.width, 23 / tempCanvas.height);
+      const scaledWidth = tempCanvas.width * scale;
+      const scaledHeight = tempCanvas.height * scale;
+      const x = (50 - scaledWidth) / 2;
+      const y = (25 - scaledHeight) / 2;
+      
+      ctx.drawImage(tempCanvas, x, y, scaledWidth, scaledHeight);
     }
 
-    const canvas = finalCanvas; // Используем финальный canvas для дальнейшей обработки
-
-    // Конвертируем canvas в blob
-    const blob = await new Promise<Blob>((resolve) => {
-      canvas.toBlob((blob) => {
+    // Создаем blob
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      finalCanvas.toBlob((blob) => {
         if (blob) {
           resolve(blob);
+        } else {
+          reject(new Error('Не удалось создать изображение'));
         }
       }, 'image/png', 1.0);
     });
 
-    // Создаем файл для отправки
-    const file = new File([blob], `barcode-${record.barcode}-25x50.png`, {
+    // Создаем файл
+    const file = new File([blob], `barcode-${record.barcode}.png`, {
       type: 'image/png',
     });
 
-    const shareData: any = {
-      title: `Штрихкод ${record.barcode}`,
-      text: `Штрихкод: ${record.barcode}`,
-      files: [file]
-    };
+    // Определяем тип устройства
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isMobile = isIOS || isAndroid;
 
-    // Проверяем поддержку Web Share API с файлами
-    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-      await navigator.share(shareData);
-      console.log('Успешно поделились штрихкодом');
-    } else {
-      // Fallback: скачиваем изображение или копируем в буфер обмена
-      if (navigator.clipboard && 'write' in navigator.clipboard) {
-        // Пытаемся скопировать изображение в буфер обмена
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'image/png': blob
-            })
-          ]);
-          alert('Изображение штрихкода 25x50 пикселей скопировано в буфер обмена');
-        } catch (clipboardError) {
-          console.error('Ошибка копирования в буфер обмена:', clipboardError);
-          // Fallback: скачиваем файл
-          downloadBarcodeImage(canvas, record.barcode);
+    // Пробуем использовать Web Share API
+    if (navigator.share) {
+      try {
+        // Сначала пробуем с файлом
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Штрихкод',
+            text: record.barcode
+          });
+          console.log('Поделились через Web Share API с файлом');
+          return;
         }
-      } else {
-        // Последний fallback: скачиваем файл
-        downloadBarcodeImage(canvas, record.barcode);
+
+        // Если не поддерживаются файлы, создаем blob URL
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Пробуем поделиться URL
+        await navigator.share({
+          title: `Штрихкод ${record.barcode}`,
+          text: `Штрихкод: ${record.barcode}`,
+          url: blobUrl
+        });
+        
+        // Очищаем URL после небольшой задержки
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        console.log('Поделились через Web Share API с URL');
+        return;
+        
+      } catch (error) {
+        console.log('Web Share API не сработал:', error);
+        // Продолжаем с альтернативными методами
       }
     }
-  } catch (error) {
-    console.error('Ошибка при создании штрихкода:', error);
-    
-    if (error instanceof Error && error.name === 'AbortError') {
-      // Пользователь отменил действие - не показываем ошибку
-      return;
+
+    // Альтернативные методы для разных платформ
+    if (isIOS) {
+      // Для iOS создаем страницу с изображением
+      const dataUrl = finalCanvas.toDataURL('image/png');
+      const newTab = window.open('', '_blank');
+      
+      if (newTab) {
+        newTab.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Штрихкод</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+            <style>
+              body {
+                margin: 0;
+                padding: 20px;
+                background: #f0f0f0;
+                font-family: -apple-system, system-ui, sans-serif;
+                text-align: center;
+              }
+              .container {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                display: inline-block;
+              }
+              img {
+                display: block;
+                margin: 20px auto;
+                image-rendering: pixelated;
+                image-rendering: -moz-crisp-edges;
+                image-rendering: crisp-edges;
+                width: 200px;    /* Изменено для горизонтального формата */
+                height: 100px;   /* Изменено для горизонтального формата */
+              }
+              .barcode-number {
+                font-family: 'SF Mono', Monaco, monospace;
+                font-size: 16px;
+                color: #333;
+                margin: 10px 0;
+              }
+              .hint {
+                color: #666;
+                font-size: 14px;
+                margin-top: 20px;
+                line-height: 1.5;
+              }
+              .share-button {
+                display: inline-block;
+                margin-top: 20px;
+                padding: 12px 24px;
+                background: #007AFF;
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 500;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h2>Штрихкод</h2>
+              <div class="barcode-number">${record.barcode}</div>
+              <img src="${dataUrl}" alt="Barcode">
+              <div class="hint">
+                Нажмите и удерживайте изображение,<br>
+                затем выберите «Сохранить изображение»<br>
+                или используйте кнопку «Поделиться» Safari
+              </div>
+            </div>
+          </body>
+          </html>
+        `);
+        newTab.document.close();
+      }
+      
+    } else if (isAndroid || isMobile) {
+      // Для Android используем прямое скачивание
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `barcode-${record.barcode}.png`;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      }, 100);
+      
+      // Показываем уведомление
+      setTimeout(() => {
+        if (confirm('Штрихкод сохранен в загрузки. Открыть папку с загрузками?')) {
+          // Пытаемся открыть загрузки (работает не на всех устройствах)
+          window.open('content://downloads/', '_blank');
+        }
+      }, 1000);
+      
+    } else {
+      // Для десктопа - копируем в буфер обмена или скачиваем
+      if (navigator.clipboard && navigator.clipboard.write) {
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          alert('Изображение скопировано в буфер обмена');
+        } catch (e) {
+          alert(e);
+          // Fallback на скачивание
+          downloadBarcodeImage(finalCanvas, record.barcode);
+        }
+      } else {
+        downloadBarcodeImage(finalCanvas, record.barcode);
+      }
     }
     
-    alert('Не удалось поделиться штрихкодом');
+  } catch (error) {
+    console.error('Ошибка:', error);
+    alert('Не удалось создать штрихкод');
   }
 };
 
