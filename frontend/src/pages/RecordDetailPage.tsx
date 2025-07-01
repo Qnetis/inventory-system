@@ -324,7 +324,7 @@ const handleShare = async () => {
               }
               .barcode-img {
                 display: block;
-                margin: 20px auto;
+                margin: 20px auto 20px calc(auto + 5mm);
                 max-width: 100%;
                 height: auto;
                 border: 1px solid #ddd;
@@ -447,6 +447,7 @@ const handleShare = async () => {
               img {
                 max-width: 100%;
                 height: auto;
+                margin-left: 5mm;
               }
               @media print {
                 body {
