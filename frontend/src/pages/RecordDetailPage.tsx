@@ -18,7 +18,12 @@ import {
   MenuItem,
   FormControlLabel,
   Checkbox,
-  IconButton
+  IconButton,
+  useTheme,
+  useMediaQuery,
+  Menu,
+  Stack,
+  Divider
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -27,6 +32,9 @@ import {
   Cancel as CancelIcon,
   Delete as DeleteIcon,
   Share as ShareIcon,
+  MoreVert as MoreVertIcon,
+  Print as PrintIcon,
+  Bluetooth as BluetoothIcon
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
@@ -41,10 +49,15 @@ const RecordDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [isEditing, setIsEditing] = useState(false);
   const [barcodeDataUrl, setBarcodeDataUrl] = useState<string>('');
+  const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
   
-  const { control, handleSubmit, reset, formState: { errors } } = useForm();
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<any>();
 
   console.log('🔍 RecordDetailPage - ID из URL:', id);
 
@@ -102,64 +115,81 @@ const RecordDetailPage: React.FC = () => {
     },
   });
 
-  const fields = fieldsData?.data || [];
-  const isOwner = record?.owner?.id === user?.id;
+  // Проверка прав
+  const isOwner = record?.owner?.id === user?.id || record?.owner === user?.id;
   const isAdmin = user?.role?.type === 'admin';
   const canEdit = isOwner || isAdmin;
+
+  // Безопасное извлечение полей
+  const fields = React.useMemo(() => {
+    if (!fieldsData) return [];
+    
+    if (fieldsData.data) {
+      return Array.isArray(fieldsData.data) ? fieldsData.data : [];
+    }
+    
+    if (Array.isArray(fieldsData)) {
+      return fieldsData;
+    }
+    
+    return [];
+  }, [fieldsData]);
 
   // Генерация штрихкода
   useEffect(() => {
     if (record?.barcode) {
-      try {
-        const canvas = document.createElement('canvas');
-        JsBarcode(canvas, record.barcode, {
-          format: "EAN13",
-          width: 2,
-          height: 80,
-          displayValue: true,
-          fontSize: 14,
-          margin: 10,
-          background: '#ffffff',
-          lineColor: '#000000'
-        });
-        setBarcodeDataUrl(canvas.toDataURL('image/png'));
-      } catch (error) {
-        console.error('Ошибка генерации штрихкода:', error);
-      }
+      const canvas = document.createElement('canvas');
+      JsBarcode(canvas, record.barcode, {
+        format: "EAN13",
+        width: 2,
+        height: 100,
+        displayValue: true,
+        fontSize: 14,
+        margin: 10
+      });
+      setBarcodeDataUrl(canvas.toDataURL('image/png'));
     }
   }, [record?.barcode]);
 
-  // Заполнение формы при загрузке записи
+  // Инициализация формы
   useEffect(() => {
     if (record) {
-      const formData: any = {
-        name: record.name || '',
-      };
-
-      // Заполняем динамические поля
-      if (record.dynamicData) {
-        Object.keys(record.dynamicData).forEach(fieldId => {
-          formData[`dynamicData.${fieldId}`] = record.dynamicData[fieldId];
-        });
-      }
+      const formData: any = {};
+      
+      fields.forEach((field: any) => {
+        const value = record.dynamicData?.[field.id];
+        formData[`dynamicData.${field.id}`] = value || '';
+      });
 
       reset(formData);
     }
-  }, [record, reset]);
+  }, [record, fields, reset]);
 
+  // Обработчики
   const handleEdit = () => {
     setIsEditing(true);
+    handleMobileMenuClose();
   };
 
   const handleCancel = () => {
     setIsEditing(false);
-    reset();
+    if (record) {
+      const formData: any = {};
+      
+      fields.forEach((field: any) => {
+        const value = record.dynamicData?.[field.id];
+        formData[`dynamicData.${field.id}`] = value || '';
+      });
+
+      reset(formData);
+    }
   };
 
   const handleDelete = () => {
-    if (window.confirm('Вы уверены, что хотите удалить эту запись?')) {
+    if (window.confirm(`Вы уверены, что хотите удалить запись ${record?.barcode}?`)) {
       deleteMutation.mutate();
     }
+    handleMobileMenuClose();
   };
 
   const onSubmit = (data: any) => {
@@ -268,6 +298,52 @@ const RecordDetailPage: React.FC = () => {
     }
   };
 
+  // Функция отправки по Bluetooth (заглушка)
+  const handleBluetoothSend = () => {
+    alert('Функция отправки по Bluetooth будет реализована в будущих версиях');
+  };
+
+  // Функция печати штрихкода
+  const handlePrint = () => {
+    if (!barcodeDataUrl) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Печать штрихкода ${record?.barcode}</title>
+            <style>
+              body {
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+              }
+              img {
+                max-width: 100%;
+                height: auto;
+              }
+              @media print {
+                body {
+                  padding: 0;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${barcodeDataUrl}" alt="Штрихкод ${record?.barcode}" />
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
   // Вспомогательная функция для скачивания изображения
   const downloadBarcodeImage = (canvas: HTMLCanvasElement, barcode: string) => {
     const link = document.createElement('a');
@@ -297,6 +373,15 @@ const RecordDetailPage: React.FC = () => {
     }
   };
 
+  // Мобильное меню
+  const handleMobileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMobileMenuAnchor(event.currentTarget);
+  };
+
+  const handleMobileMenuClose = () => {
+    setMobileMenuAnchor(null);
+  };
+
   if (recordLoading || fieldsLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -323,44 +408,75 @@ const RecordDetailPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: isMobile ? 2 : 3 }}>
       {/* Хедер */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton onClick={() => navigate('/records')} sx={{ mr: 2 }}>
+        <IconButton onClick={() => navigate('/records')} sx={{ mr: 1 }}>
           <BackIcon />
         </IconButton>
-        <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-          {isEditing ? 'Редактирование записи' : 'Просмотр записи'}
+        <Typography 
+          variant={isMobile ? "h6" : "h4"} 
+          component="h1" 
+          sx={{ flexGrow: 1, fontSize: isMobile ? '1.1rem' : undefined }}
+        >
+          {isEditing ? 'Редактирование' : 'Просмотр записи'}
         </Typography>
-        <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
-          {!isEditing && canEdit && (
-            <Button
-              variant="outlined"
-              startIcon={<EditIcon />}
-              onClick={handleEdit}
+        
+        {/* Десктопные кнопки */}
+        {!isMobile && (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {!isEditing && canEdit && (
+              <Button
+                variant="outlined"
+                startIcon={<EditIcon />}
+                onClick={handleEdit}
+              >
+                Редактировать
+              </Button>
+            )}
+            {canEdit && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={handleDelete}
+              >
+                Удалить
+              </Button>
+            )}
+          </Box>
+        )}
+        
+        {/* Мобильное меню */}
+        {isMobile && canEdit && !isEditing && (
+          <>
+            <IconButton onClick={handleMobileMenuOpen}>
+              <MoreVertIcon />
+            </IconButton>
+            <Menu
+              anchorEl={mobileMenuAnchor}
+              open={Boolean(mobileMenuAnchor)}
+              onClose={handleMobileMenuClose}
             >
-              Редактировать
-            </Button>
-          )}
-          {canEdit && (
-            <Button
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={handleDelete}
-            >
-              Удалить
-            </Button>
-          )}
-        </Box>
+              <MenuItem onClick={handleEdit}>
+                <EditIcon sx={{ mr: 1 }} fontSize="small" />
+                Редактировать
+              </MenuItem>
+              <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
+                <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
+                Удалить
+              </MenuItem>
+            </Menu>
+          </>
+        )}
       </Box>
 
       <form onSubmit={handleSubmit(onSubmit)}>
-        <Grid container spacing={3}>
+        <Grid container spacing={isMobile ? 2 : 3}>
           {/* Основная информация */}
           <Grid size={{ xs: 12, md: 8 }}>
             <Card>
-              <CardContent>
+              <CardContent sx={{ p: isMobile ? 2 : 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Основная информация
                 </Typography>
@@ -374,7 +490,8 @@ const RecordDetailPage: React.FC = () => {
                       fullWidth
                       disabled
                       variant="outlined"
-                      helperText="Штрихкод генерируется автоматически и служит уникальным идентификатором записи"
+                      helperText="Штрихкод генерируется автоматически"
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                 </Grid>
@@ -391,7 +508,7 @@ const RecordDetailPage: React.FC = () => {
                         const value = record?.dynamicData?.[field.id];
 
                         return (
-                          <Grid size={{ xs: 12, sm: 6 }} key={field.id}>
+                          <Grid size={{ xs: 12, sm: isTablet ? 12 : 6 }} key={field.id}>
                             {isEditing ? (
                               <>
                                 {fieldData.fieldType === 'STRING' && (
@@ -405,13 +522,13 @@ const RecordDetailPage: React.FC = () => {
                                         label={fieldData.name}
                                         fullWidth
                                         error={!!errors[`dynamicData.${field.id}`]}
-                                        helperText={errors[`dynamicData.${field.id}`]?.message as string}
+                                        helperText={errors[`dynamicData.${field.id}`]?.message as string || ''}
                                         required={fieldData.required}
+                                        size={isMobile ? "small" : "medium"}
                                       />
                                     )}
                                   />
                                 )}
-
                                 {fieldData.fieldType === 'NUMBER' && (
                                   <Controller
                                     name={`dynamicData.${field.id}`}
@@ -424,13 +541,13 @@ const RecordDetailPage: React.FC = () => {
                                         type="number"
                                         fullWidth
                                         error={!!errors[`dynamicData.${field.id}`]}
-                                        helperText={errors[`dynamicData.${field.id}`]?.message as string}
+                                        helperText={errors[`dynamicData.${field.id}`]?.message as string || ''}
                                         required={fieldData.required}
+                                        size={isMobile ? "small" : "medium"}
                                       />
                                     )}
                                   />
                                 )}
-
                                 {fieldData.fieldType === 'MONEY' && (
                                   <Controller
                                     name={`dynamicData.${field.id}`}
@@ -439,37 +556,38 @@ const RecordDetailPage: React.FC = () => {
                                     render={({ field: controllerField }) => (
                                       <TextField
                                         {...controllerField}
-                                        label={fieldData.name}
+                                        label={`${fieldData.name} (₽)`}
                                         type="number"
                                         fullWidth
                                         error={!!errors[`dynamicData.${field.id}`]}
-                                        helperText={errors[`dynamicData.${field.id}`]?.message as string}
+                                        helperText={errors[`dynamicData.${field.id}`]?.message as string || ''}
                                         required={fieldData.required}
-                                        InputProps={{
-                                          endAdornment: '₽'
-                                        }}
+                                        size={isMobile ? "small" : "medium"}
                                       />
                                     )}
                                   />
                                 )}
-
                                 {fieldData.fieldType === 'SELECT' && (
                                   <Controller
                                     name={`dynamicData.${field.id}`}
                                     control={control}
                                     rules={{ required: fieldData.required ? 'Это поле обязательно' : false }}
                                     render={({ field: controllerField }) => (
-                                      <FormControl
-                                        fullWidth
+                                      <FormControl 
+                                        fullWidth 
                                         error={!!errors[`dynamicData.${field.id}`]}
-                                        required={fieldData.required}
+                                        size={isMobile ? "small" : "medium"}
                                       >
-                                        <InputLabel>{fieldData.name}</InputLabel>
+                                        <InputLabel required={fieldData.required}>
+                                          {fieldData.name}
+                                        </InputLabel>
                                         <Select
                                           {...controllerField}
                                           label={fieldData.name}
-                                          error={!!errors[`dynamicData.${field.id}`]}
                                         >
+                                          <MenuItem value="">
+                                            <em>Не выбрано</em>
+                                          </MenuItem>
                                           {fieldData.options?.map((option: string) => (
                                             <MenuItem key={option} value={option}>
                                               {option}
@@ -480,7 +598,6 @@ const RecordDetailPage: React.FC = () => {
                                     )}
                                   />
                                 )}
-
                                 {fieldData.fieldType === 'CHECKBOX' && (
                                   <Controller
                                     name={`dynamicData.${field.id}`}
@@ -500,13 +617,13 @@ const RecordDetailPage: React.FC = () => {
                                 )}
                               </>
                             ) : (
-                              // Просмотр поля
                               <TextField
                                 label={fieldData.name}
-                                value={formatFieldValue(value, fieldData.fieldType)}
+                                value={formatFieldValue(value, fieldData.fieldType) || '-'}
                                 fullWidth
                                 disabled
                                 variant="outlined"
+                                size={isMobile ? "small" : "medium"}
                               />
                             )}
                           </Grid>
@@ -516,14 +633,15 @@ const RecordDetailPage: React.FC = () => {
                   </>
                 )}
 
-                {/* Кнопки управления формой */}
+                {/* Кнопки сохранения/отмены для режима редактирования */}
                 {isEditing && (
-                  <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                  <Box sx={{ mt: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     <Button
                       type="submit"
                       variant="contained"
                       startIcon={updateMutation.isPending ? <CircularProgress size={20} /> : <SaveIcon />}
                       disabled={updateMutation.isPending}
+                      fullWidth={isMobile}
                     >
                       Сохранить
                     </Button>
@@ -532,6 +650,7 @@ const RecordDetailPage: React.FC = () => {
                       startIcon={<CancelIcon />}
                       onClick={handleCancel}
                       disabled={updateMutation.isPending}
+                      fullWidth={isMobile}
                     >
                       Отмена
                     </Button>
@@ -545,43 +664,45 @@ const RecordDetailPage: React.FC = () => {
           <Grid size={{ xs: 12, md: 4 }}>
             {/* Информация о записи */}
             <Card sx={{ mb: 2 }}>
-              <CardContent>
+              <CardContent sx={{ p: isMobile ? 2 : 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Информация о записи
                 </Typography>
                 
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Создатель
-                  </Typography>
-                  <Typography variant="body1">
-                    {record?.owner?.username || record?.owner?.email || 'Неизвестно'}
-                  </Typography>
-                </Box>
+                <Stack spacing={2}>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Создатель
+                    </Typography>
+                    <Typography variant="body1">
+                      {record?.owner?.username || record?.owner?.email || 'Неизвестно'}
+                    </Typography>
+                  </Box>
 
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Дата создания
-                  </Typography>
-                  <Typography variant="body1">
-                    {record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
-                  </Typography>
-                </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Дата создания
+                    </Typography>
+                    <Typography variant="body1">
+                      {record?.createdAt ? format(new Date(record.createdAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
+                    </Typography>
+                  </Box>
 
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Последнее изменение
-                  </Typography>
-                  <Typography variant="body1">
-                    {record?.updatedAt ? format(new Date(record.updatedAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
-                  </Typography>
-                </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Последнее изменение
+                    </Typography>
+                    <Typography variant="body1">
+                      {record?.updatedAt ? format(new Date(record.updatedAt), 'dd.MM.yyyy в HH:mm', { locale: ru }) : 'Неизвестно'}
+                    </Typography>
+                  </Box>
+                </Stack>
               </CardContent>
             </Card>
 
             {/* Штрихкод */}
             <Card>
-              <CardContent>
+              <CardContent sx={{ p: isMobile ? 2 : 3 }}>
                 <Typography variant="h6" gutterBottom>
                   Штрихкод
                 </Typography>
@@ -591,25 +712,66 @@ const RecordDetailPage: React.FC = () => {
                     <img 
                       src={barcodeDataUrl} 
                       alt="Штрихкод" 
-                      style={{ maxWidth: '100%', height: 'auto' }} 
+                      style={{ 
+                        maxWidth: '100%', 
+                        height: 'auto',
+                        maxHeight: isMobile ? '80px' : '100px'
+                      }} 
                     />
                   )}
                 </Box>
 
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 2 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ textAlign: 'center', mb: 2, fontFamily: 'monospace' }}
+                >
                   {record?.barcode}
                 </Typography>
 
-                <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
+                <Divider sx={{ my: 2 }} />
+
+                {/* Кнопки действий со штрихкодом */}
+                <Stack spacing={1}>
                   <Button
                     variant="outlined"
                     startIcon={<ShareIcon />}
                     onClick={handleShare}
-                    size="small"
+                    size={isMobile ? "small" : "medium"}
+                    fullWidth
                   >
                     Поделиться
                   </Button>
-                </Box>
+                  
+                  <Button
+                    variant="outlined"
+                    startIcon={<PrintIcon />}
+                    onClick={handlePrint}
+                    size={isMobile ? "small" : "medium"}
+                    fullWidth
+                  >
+                    Печать
+                  </Button>
+                  
+                  <Button
+                    variant="outlined"
+                    startIcon={<BluetoothIcon />}
+                    onClick={handleBluetoothSend}
+                    size={isMobile ? "small" : "medium"}
+                    fullWidth
+                    sx={{ 
+                      borderColor: 'primary.main',
+                      color: 'primary.main',
+                      '&:hover': {
+                        borderColor: 'primary.dark',
+                        backgroundColor: 'primary.main',
+                        color: 'white'
+                      }
+                    }}
+                  >
+                    Отправить по Bluetooth
+                  </Button>
+                </Stack>
               </CardContent>
             </Card>
           </Grid>
