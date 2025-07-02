@@ -131,20 +131,44 @@ const RecordDetailPage: React.FC = () => {
   }, [fieldsData]);
 
   // Генерация штрихкода
-  useEffect(() => {
-    if (record?.barcode) {
-      const canvas = document.createElement('canvas');
-      JsBarcode(canvas, record.barcode, {
-        format: "EAN13",
-        width: 2,
-        height: 100,
-        displayValue: true,
-        fontSize: 20,
-        margin: 10
-      });
+// Генерация штрихкода
+useEffect(() => {
+  if (record?.barcode) {
+    const canvas = document.createElement('canvas');
+    JsBarcode(canvas, record.barcode, {
+      format: "EAN13",
+      width: 4,              // Увеличиваем в 2 раза
+      height: 200,           // Увеличиваем в 2 раза
+      displayValue: true,
+      fontSize: 40,          // Увеличиваем в 2 раза
+      margin: 20,            // Увеличиваем в 2 раза
+      textMargin: 10,        // Добавлено
+      fontOptions: "bold"    // Добавлено
+    });
+    
+    // Масштабируем canvas обратно для отображения
+    const scaledCanvas = document.createElement('canvas');
+    const scaledCtx = scaledCanvas.getContext('2d');
+    
+    if (scaledCtx) {
+      // Устанавливаем размер выходного canvas
+      scaledCanvas.width = canvas.width / 2;
+      scaledCanvas.height = canvas.height / 2;
+      
+      // Включаем сглаживание для лучшего качества
+      scaledCtx.imageSmoothingEnabled = true;
+      scaledCtx.imageSmoothingQuality = 'high';
+      
+      // Рисуем с масштабированием
+      scaledCtx.drawImage(canvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+      
+      setBarcodeDataUrl(scaledCanvas.toDataURL('image/png'));
+    } else {
+      // Если не удалось получить контекст, используем оригинальный canvas
       setBarcodeDataUrl(canvas.toDataURL('image/png'));
     }
-  }, [record?.barcode]);
+  }
+}, [record?.barcode]);
 
   // Инициализация формы
   useEffect(() => {
@@ -672,23 +696,29 @@ const RecordDetailPage: React.FC = () => {
                   Штрихкод
                 </Typography>
                 
-                <Box sx={{ textAlign: 'center', mb: 2 }}>
-                  {barcodeDataUrl && (
-                    <img 
-                      src={barcodeDataUrl} 
-                      alt="Штрихкод" 
-                      style={{ 
-                        width: '189px',  // 50мм
-                        height: '95px',  // 25мм
-                        maxWidth: '100%', // Адаптивность для маленьких экранов
-                        objectFit: 'contain',
-                        border: '1px solid #ddd',
-                        padding: '5px',
-                        backgroundColor: '#fff'
-                      }} 
-                    />
-                  )}
-                </Box>
+<Box sx={{ 
+  textAlign: 'center', 
+  mb: 2,
+  position: 'relative'  // Добавлено для позиционирования
+}}>
+  {barcodeDataUrl && (
+    <img 
+      src={barcodeDataUrl} 
+      alt="Штрихкод" 
+      style={{ 
+        width: '189px',
+        height: '95px',
+        maxWidth: '100%',
+        objectFit: 'contain',
+        border: '1px solid #ddd',
+        padding: '5px',
+        backgroundColor: '#fff',
+        marginLeft: '-19px',  // Сдвиг на 5мм влево (5мм ≈ 19px при 96 DPI)
+        position: 'relative'  // Для корректного сдвига
+      }} 
+    />
+  )}
+</Box>
 
                 <Typography 
                   variant="body2" 
