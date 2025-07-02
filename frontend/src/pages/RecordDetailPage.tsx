@@ -38,8 +38,32 @@ import { ru } from 'date-fns/locale';
 import JsBarcode from 'jsbarcode';
 import { recordsApi, fieldsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+// Вынеси ВСЕ константы ПЕРЕД компонентом
+const BARCODE_CONFIG = {
+  format: "EAN13" as const,
+  width: 4,
+  height: 150,
+  displayValue: true,
+  fontSize: 40,
+  margin: 12,
+  textMargin: 6,
+  fontOptions: "bold",
+  background: '#ffffff',
+  lineColor: '#000000',
+  textAlign: "center" as const
+};
 
+// Константы размеров
+const BARCODE_WIDTH_MM = 50;
+const BARCODE_HEIGHT_MM = 25;
+const PRINT_DPI = 203;
+
+// Функция конвертации
+const mmToPx = (mm: number, dpi: number = 96): number => (mm / 25.4) * dpi;
+
+// ТЕПЕРЬ сам компонент
 const RecordDetailPage: React.FC = () => {
+  // ... остальной код компонента
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -51,7 +75,8 @@ const RecordDetailPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [barcodeDataUrl, setBarcodeDataUrl] = useState<string>('');
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
-  
+// Вынеси ВСЕ константы ПЕРЕД компонентом
+
   const { control, handleSubmit, reset, formState: { errors } } = useForm<any>();
 
   console.log('🔍 RecordDetailPage - ID из URL:', id);
@@ -130,59 +155,51 @@ const RecordDetailPage: React.FC = () => {
     return [];
   }, [fieldsData]);
 
+ 
+
+  // Инициализация формы
   // Генерация штрихкода
 // Генерация штрихкода
 useEffect(() => {
   if (record?.barcode) {
     const canvas = document.createElement('canvas');
-    JsBarcode(canvas, record.barcode, {
-      format: "EAN13",
-      width: 4,              // Увеличиваем в 2 раза
-      height: 200,           // Увеличиваем в 2 раза
-      displayValue: true,
-      fontSize: 40,          // Увеличиваем в 2 раза
-      margin: 20,            // Увеличиваем в 2 раза
-      textMargin: 10,        // Добавлено
-      fontOptions: "bold"    // Добавлено
-    });
     
-    // Масштабируем canvas обратно для отображения
-    const scaledCanvas = document.createElement('canvas');
-    const scaledCtx = scaledCanvas.getContext('2d');
+    // Используем те же параметры, что и для скачивания
+    JsBarcode(canvas, record.barcode, BARCODE_CONFIG);
     
-    if (scaledCtx) {
-      // Устанавливаем размер выходного canvas
-      scaledCanvas.width = canvas.width / 2;
-      scaledCanvas.height = canvas.height / 2;
+    // Создаем canvas для отображения с нужным размером
+    const displayCanvas = document.createElement('canvas');
+    const displayWidth = Math.round(mmToPx(BARCODE_WIDTH_MM, 96));   // 189px
+    const displayHeight = Math.round(mmToPx(BARCODE_HEIGHT_MM, 96)); // 94px
+    
+    displayCanvas.width = displayWidth;
+    displayCanvas.height = displayHeight;
+    
+    const ctx = displayCanvas.getContext('2d');
+    if (ctx) {
+      // Белый фон
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, displayCanvas.width, displayCanvas.height);
       
-      // Включаем сглаживание для лучшего качества
-      scaledCtx.imageSmoothingEnabled = true;
-      scaledCtx.imageSmoothingQuality = 'high';
+      // Отключаем сглаживание
+      ctx.imageSmoothingEnabled = false;
       
-      // Рисуем с масштабированием
-      scaledCtx.drawImage(canvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+      // Масштабируем и центрируем - те же расчеты, что и для печати
+      const scaleX = displayCanvas.width / canvas.width;
+      const scaleY = displayCanvas.height / canvas.height;
+      const scale = Math.min(scaleX, scaleY) * 0.85; // Тот же коэффициент!
       
-      setBarcodeDataUrl(scaledCanvas.toDataURL('image/png'));
-    } else {
-      // Если не удалось получить контекст, используем оригинальный canvas
-      setBarcodeDataUrl(canvas.toDataURL('image/png'));
+      const scaledWidth = canvas.width * scale;
+      const scaledHeight = canvas.height * scale;
+      const x = (displayCanvas.width - scaledWidth) / 2;
+      const y = (displayCanvas.height - scaledHeight) / 2;
+      
+      ctx.drawImage(canvas, x, y, scaledWidth, scaledHeight);
+      
+      setBarcodeDataUrl(displayCanvas.toDataURL('image/png'));
     }
   }
 }, [record?.barcode]);
-
-  // Инициализация формы
-  useEffect(() => {
-    if (record) {
-      const formData: any = {};
-      
-      fields.forEach((field: any) => {
-        const value = record.dynamicData?.[field.id];
-        formData[`dynamicData.${field.id}`] = value || '';
-      });
-
-      reset(formData);
-    }
-  }, [record, fields, reset]);
 
   // Обработчики
   const handleEdit = () => {
@@ -231,65 +248,78 @@ useEffect(() => {
     updateMutation.mutate(updateData);
   };
 
-  const handleShare = async () => {
-    if (!record?.barcode) {
-      alert('Штрихкод не найден');
-      return;
+ const handleShare = async () => {
+  if (!record?.barcode) {
+    alert('Штрихкод не найден');
+    return;
+  }
+
+  try {
+    const printWidth = Math.round(mmToPx(BARCODE_WIDTH_MM, PRINT_DPI));   // 399px
+    const printHeight = Math.round(mmToPx(BARCODE_HEIGHT_MM, PRINT_DPI)); // 200px
+    
+    // Генерируем штрихкод с теми же параметрами
+    const tempCanvas = document.createElement('canvas');
+    JsBarcode(tempCanvas, record.barcode, BARCODE_CONFIG);
+    
+    // Создаем canvas для печати
+    const printCanvas = document.createElement('canvas');
+    printCanvas.width = printWidth;
+    printCanvas.height = printHeight;
+    
+    const ctx = printCanvas.getContext('2d');
+    if (ctx) {
+      // Белый фон
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, printCanvas.width, printCanvas.height);
+      
+      // Отключаем сглаживание
+      ctx.imageSmoothingEnabled = false;
+      
+      // Те же расчеты масштабирования
+      const scaleX = printCanvas.width / tempCanvas.width;
+      const scaleY = printCanvas.height / tempCanvas.height;
+      const scale = Math.min(scaleX, scaleY) * 0.85;
+      
+      const scaledWidth = tempCanvas.width * scale;
+      const scaledHeight = tempCanvas.height * scale;
+      const x = (printCanvas.width - scaledWidth) / 2;
+      const y = (printCanvas.height - scaledHeight) / 2;
+      
+      ctx.drawImage(tempCanvas, x, y, scaledWidth, scaledHeight);
     }
+    
+    // Конвертируем в blob
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      printCanvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Не удалось создать изображение'));
+        }
+      }, 'image/png', 1.0);
+    });
 
-    try {
-      // Создаем canvas для штрихкода
-      const canvas = document.createElement('canvas');
-      
-      // Генерируем штрихкод оптимального размера
-      JsBarcode(canvas, record.barcode, {
-        format: "EAN13",
-        width: 2,              // Ширина линии (2px для хорошей читаемости)
-        height: 80,            // Высота штрихкода (80px стандарт)
-        displayValue: true,    // Показываем числа под штрихкодом
-        fontSize: 24,          // Размер шрифта для чисел
-        margin: 10,            // Отступы вокруг штрихкода
-        background: '#ffffff',
-        lineColor: '#000000',
-        textMargin: 2,         // Отступ текста от штрихкода
-        fontOptions: "",       // Обычный шрифт
-        textAlign: "center"    // Выравнивание текста по центру
-      });
-
-      console.log('Размер сгенерированного штрихкода:', canvas.width + 'x' + canvas.height);
-
-      // Конвертируем в blob
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Не удалось создать изображение'));
-          }
-        }, 'image/png', 1.0);
-      });
-
-      // Скачиваем изображение
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `barcode-${record.barcode}.png`;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-      }, 100);
-      
-      // Показываем уведомление
-      alert('Изображение штрихкода сохранено в папку загрузок');
-      
-    } catch (error) {
-      console.error('Ошибка:', error);
-      alert('Не удалось сохранить штрихкод');
-    }
-  };
+    // Скачиваем
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `barcode-${record.barcode}-50x25mm-203dpi.png`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }, 100);
+    
+    alert('Штрихкод сохранен для термопринтера (203 DPI, 50x25мм)');
+    
+  } catch (error) {
+    console.error('Ошибка:', error);
+    alert('Не удалось сохранить штрихкод');
+  }
+};
 
   const formatFieldValue = (value: any, fieldType: string) => {
     if (!value) return '';
@@ -697,27 +727,32 @@ useEffect(() => {
                 </Typography>
                 
 <Box sx={{ 
-  textAlign: 'center', 
   mb: 2,
-  position: 'relative'  // Добавлено для позиционирования
+  display: 'flex',
+  justifyContent: 'center',
+  position: 'relative'
 }}>
-  {barcodeDataUrl && (
-    <img 
-      src={barcodeDataUrl} 
-      alt="Штрихкод" 
-      style={{ 
-        width: '189px',
-        height: '95px',
-        maxWidth: '100%',
-        objectFit: 'contain',
-        border: '1px solid #ddd',
-        padding: '5px',
-        backgroundColor: '#fff',
-        marginLeft: '-19px',  // Сдвиг на 5мм влево (5мм ≈ 19px при 96 DPI)
-        position: 'relative'  // Для корректного сдвига
-      }} 
-    />
-  )}
+  <Box sx={{ 
+    position: 'relative',
+    marginLeft: '-19px'  // Сдвиг на 5мм влево
+  }}>
+    {barcodeDataUrl && (
+      <img 
+        src={barcodeDataUrl} 
+        alt="Штрихкод" 
+        style={{ 
+          width: '189px',     // 50мм
+          height: '94px',     // 25мм
+          objectFit: 'fill',
+          border: '1px solid #ddd',
+          padding: '5px',
+          backgroundColor: '#fff',
+          display: 'block',
+          imageRendering: 'crisp-edges'
+        }} 
+      />
+    )}
+  </Box>
 </Box>
 
                 <Typography 
