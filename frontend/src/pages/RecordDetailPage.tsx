@@ -139,7 +139,7 @@ const RecordDetailPage: React.FC = () => {
         width: 2,
         height: 100,
         displayValue: true,
-        fontSize: 14,
+        fontSize: 20,
         margin: 10
       });
       setBarcodeDataUrl(canvas.toDataURL('image/png'));
@@ -223,7 +223,7 @@ const RecordDetailPage: React.FC = () => {
         width: 2,              // Ширина линии (2px для хорошей читаемости)
         height: 80,            // Высота штрихкода (80px стандарт)
         displayValue: true,    // Показываем числа под штрихкодом
-        fontSize: 16,          // Размер шрифта для чисел
+        fontSize: 24,          // Размер шрифта для чисел
         margin: 10,            // Отступы вокруг штрихкода
         background: '#ffffff',
         lineColor: '#000000',
