@@ -157,20 +157,27 @@ const RecordDetailPage: React.FC = () => {
 
  
 
-  // Инициализация формы
-  // Генерация штрихкода
 // Генерация штрихкода
 useEffect(() => {
   if (record?.barcode) {
+    console.log('📊 DISPLAY: Начинаем генерацию для отображения');
+    console.log('📊 DISPLAY: BARCODE_CONFIG:', BARCODE_CONFIG);
+    
     const canvas = document.createElement('canvas');
     
     // Используем те же параметры, что и для скачивания
     JsBarcode(canvas, record.barcode, BARCODE_CONFIG);
     
+    console.log('📊 DISPLAY: Размер canvas после JsBarcode:', canvas.width, 'x', canvas.height);
+    
     // Создаем canvas для отображения с нужным размером
     const displayCanvas = document.createElement('canvas');
-    const displayWidth = Math.round(mmToPx(BARCODE_WIDTH_MM, 96));   // 189px
-    const displayHeight = Math.round(mmToPx(BARCODE_HEIGHT_MM, 96)); // 94px
+    
+    // ИЗМЕНЕНИЕ: Используем те же размеры, что и для печати!
+    const displayWidth = Math.round(mmToPx(BARCODE_WIDTH_MM, PRINT_DPI));   // 400px
+    const displayHeight = Math.round(mmToPx(BARCODE_HEIGHT_MM, PRINT_DPI)); // 200px
+    
+    console.log('📊 DISPLAY: Целевой размер:', displayWidth, 'x', displayHeight);
     
     displayCanvas.width = displayWidth;
     displayCanvas.height = displayHeight;
@@ -184,23 +191,27 @@ useEffect(() => {
       // Отключаем сглаживание
       ctx.imageSmoothingEnabled = false;
       
-      // Масштабируем и центрируем - те же расчеты, что и для печати
+      // Используем тот же коэффициент, что и при скачивании
       const scaleX = displayCanvas.width / canvas.width;
       const scaleY = displayCanvas.height / canvas.height;
-      const scale = Math.min(scaleX, scaleY) * 0.85; // Тот же коэффициент!
+      const scale = Math.min(scaleX, scaleY) * 0.85; // С коэффициентом 0.85
+      
+      console.log('📊 DISPLAY: Масштаб:', scale, '(scaleX:', scaleX, 'scaleY:', scaleY, ')');
       
       const scaledWidth = canvas.width * scale;
       const scaledHeight = canvas.height * scale;
       const x = (displayCanvas.width - scaledWidth) / 2;
       const y = (displayCanvas.height - scaledHeight) / 2;
       
+      console.log('📊 DISPLAY: Финальная позиция и размер:', x, y, scaledWidth, scaledHeight);
+      
       ctx.drawImage(canvas, x, y, scaledWidth, scaledHeight);
       
       setBarcodeDataUrl(displayCanvas.toDataURL('image/png'));
+      console.log('📊 DISPLAY: Готово!');
     }
   }
 }, [record?.barcode]);
-
   // Обработчики
   const handleEdit = () => {
     setIsEditing(true);
@@ -255,12 +266,19 @@ useEffect(() => {
   }
 
   try {
+    console.log('💾 DOWNLOAD: Начинаем генерацию для скачивания');
+    console.log('💾 DOWNLOAD: BARCODE_CONFIG:', BARCODE_CONFIG);
+    
     const printWidth = Math.round(mmToPx(BARCODE_WIDTH_MM, PRINT_DPI));   // 399px
     const printHeight = Math.round(mmToPx(BARCODE_HEIGHT_MM, PRINT_DPI)); // 200px
+    
+    console.log('💾 DOWNLOAD: Размер для печати:', printWidth, 'x', printHeight);
     
     // Генерируем штрихкод с теми же параметрами
     const tempCanvas = document.createElement('canvas');
     JsBarcode(tempCanvas, record.barcode, BARCODE_CONFIG);
+    
+    console.log('💾 DOWNLOAD: Размер canvas после JsBarcode:', tempCanvas.width, 'x', tempCanvas.height);
     
     // Создаем canvas для печати
     const printCanvas = document.createElement('canvas');
@@ -281,13 +299,18 @@ useEffect(() => {
       const scaleY = printCanvas.height / tempCanvas.height;
       const scale = Math.min(scaleX, scaleY) * 0.85;
       
+      console.log('💾 DOWNLOAD: Масштаб:', scale, '(scaleX:', scaleX, 'scaleY:', scaleY, ')');
+      
       const scaledWidth = tempCanvas.width * scale;
       const scaledHeight = tempCanvas.height * scale;
       const x = (printCanvas.width - scaledWidth) / 2;
       const y = (printCanvas.height - scaledHeight) / 2;
       
+      console.log('💾 DOWNLOAD: Финальная позиция и размер:', x, y, scaledWidth, scaledHeight);
+      
       ctx.drawImage(tempCanvas, x, y, scaledWidth, scaledHeight);
     }
+    
     
     // Конвертируем в blob
     const blob = await new Promise<Blob>((resolve, reject) => {
@@ -734,15 +757,15 @@ useEffect(() => {
 }}>
   <Box sx={{ 
     position: 'relative',
-    marginLeft: '-19px'  // Сдвиг на 5мм влево
+    marginLeft: '-40px'  // Увеличить сдвиг пропорционально (было -19px для 189px ширины)
   }}>
     {barcodeDataUrl && (
       <img 
         src={barcodeDataUrl} 
         alt="Штрихкод" 
         style={{ 
-          width: '189px',     // 50мм
-          height: '94px',     // 25мм
+          width: '400px',     // Изменено с 189px
+          height: '200px',    // Изменено с 94px
           objectFit: 'fill',
           border: '1px solid #ddd',
           padding: '5px',
