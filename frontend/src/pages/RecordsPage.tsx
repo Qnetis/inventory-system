@@ -676,23 +676,21 @@ export const RecordsPage: React.FC = () => {
                           return (
                             <TableCell key={field.id}>
                               <TableSortLabel
-                                active={orderBy === field.id}
-                                direction={orderBy === field.id ? order : 'asc'}
-                                onClick={() => handleSort(field.id)}
-                              >
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  {fieldData.name}
-                                  {fieldData.isRequired && (
-                                    <Chip 
-                                      size="small" 
-                                      label="*" 
-                                      color="error" 
-                                      variant="outlined"
-                                      sx={{ minWidth: 'auto', width: 20, height: 20 }}
-                                    />
-                                  )}
-                                </Box>
-                              </TableSortLabel>
+  active={orderBy === field.id}
+  direction={orderBy === field.id ? order : 'asc'}
+  onClick={() => handleSort(field.id)}
+>
+  {fieldData.name}
+  {fieldData.isRequired && (
+    <Typography 
+      component="span" 
+      color="error" 
+      sx={{ ml: 0.5, fontSize: 'inherit' }}
+    >
+      *
+    </Typography>
+  )}
+</TableSortLabel>
                             </TableCell>
                           );
                         })}
